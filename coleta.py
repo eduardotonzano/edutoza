@@ -11,15 +11,32 @@ WORKERS       = 12     # downloads simultaneos. Se houver bloqueio (429/403), re
 TIMEOUT       = 8      # segundos por artigo
 JANELA_HORAS  = 24
 GDELT_URL     = "https://api.gdeltproject.org/api/v2/doc/doc"
-GDELT_PAUSA   = 1.0    # segundos entre consultas (respeita o rate limit do GDELT)
+GDELT_WORKERS = 8      # buscas simultaneas no GDELT (paraleliza as 53 consultas)
 GDELT_MAX     = 75     # artigos por empresa (max do GDELT e 250)
 
-FONTES_BLOQUEADAS = ["reddit","facebook","twitter","x.com","instagram","tiktok","youtube",
-    "medium.com","quora","blogspot","wordpress.com","substack","tradingview",
-    "stocktwits","wallmine","marketbeat"]
+# LISTA BRANCA (allowlist): so noticias destas fontes Tier 1 sao aceitas. Qualquer
+# dominio que nao bata com um destes termos e descartado (corta sites de "fulano
+# comprou X acoes", agregadores e blogs). Edite a lista para incluir/excluir fontes.
+FONTES_TIER1 = [
+    # Agencias e imprensa financeira global
+    "reuters", "bloomberg", "wsj.com", "wall street journal", "ft.com", "financial times",
+    "cnbc", "economist", "barron", "marketwatch", "forbes.com", "fortune.com",
+    "nytimes", "new york times", "washingtonpost", "theguardian", "guardian.co",
+    "apnews", "associated press", "nikkei", "asia.nikkei", "axios", "businessinsider",
+    "finance.yahoo", "yahoo finance", "oilprice",
+    # Brasil
+    "valor", "infomoney", "exame", "estadao", "folha.uol", "oglobo", "globo.com",
+    "g1.globo", "braziljournal", "brazil journal", "pipelinevalor", "neofeed",
+    "bloomberglinea", "moneytimes", "investnews", "capitalreset",
+    # Mexico / America Latina / Espanha
+    "elfinanciero", "eleconomista", "expansion", "reforma", "milenio", "cincodias",
+    # Europa
+    "handelsblatt", "lesechos", "lemonde", "boersen", "boerse", "ilsole24ore", "repubblica",
+]
+# Subconjunto "top" usado apenas como bonus de pontuacao (desempate).
 FONTES_PREMIUM = ["reuters","bloomberg","cnbc","financial times","ft.com","wall street journal",
-    "wsj","marketwatch","barron","seeking alpha","forbes","fortune","valor","infomoney",
-    "exame","oilprice","the guardian","nikkei","yahoo finance"]
+    "wsj","marketwatch","barron","forbes","fortune","valor","infomoney",
+    "exame","oilprice","the guardian","nikkei","yahoo finance","economist","nytimes"]
 VERBOS = ["reported","reports","posted","announced","announces","said","says","unveiled",
     "launched","launches","raised","raises","cut","cuts","named","appointed","acquired",
     "acquires","to acquire","bought","buys","sued","faces","beat","beats","missed","warned",
@@ -92,9 +109,10 @@ def validar(titulo, corpo, resumo, cfg, premium=False):
     return 0
 
 def fonte_ok(fonte):
+    """So aceita fontes Tier 1 (allowlist). Sem fonte identificada -> rejeita."""
     f = norm(fonte)
-    if not f: return True
-    return not any(b in f for b in FONTES_BLOQUEADAS)
+    if not f: return False
+    return any(t in f for t in FONTES_TIER1)
 
 def eh_premium(fonte):
     f = norm(fonte)
@@ -126,18 +144,27 @@ def buscar_gdelt(termo):
 
 
 def coletar_candidatos(empresas):
-    """Busca no GDELT por empresa, dedup por link e por titulo, janela de 24h."""
+    """Busca no GDELT por empresa (em paralelo), dedup por link e titulo, janela de 24h."""
     limite = datetime.now(timezone.utc) - timedelta(hours=JANELA_HORAS)
+
+    # 1) Dispara as 53 buscas em paralelo (era o gargalo: antes iam em fila ~11 min).
+    resultados = {}
+    with ThreadPoolExecutor(max_workers=GDELT_WORKERS) as ex:
+        futuros = {ex.submit(buscar_gdelt, cfg["forte"][0] if cfg["forte"] else nome): nome
+                   for nome, cfg in empresas.items()}
+        for fut in as_completed(futuros):
+            nome = futuros[fut]
+            try:
+                resultados[nome] = fut.result()
+            except Exception as e:
+                print(f"  {nome}: erro {str(e)[:40]}")
+                resultados[nome] = []
+
+    # 2) Processa os resultados em ordem (dedup deterministico, sem threads).
     candidatos = {}
     titulos_vistos = set()
-    for nome, cfg in empresas.items():
-        termo = cfg["forte"][0] if cfg["forte"] else nome
-        try:
-            artigos = buscar_gdelt(termo)
-        except Exception as ex:
-            print(f"  {nome}: erro {str(ex)[:40]}")
-            artigos = []
-        for a in artigos:
+    for nome in empresas:
+        for a in resultados.get(nome, []):
             titulo = (a.get("title") or "").strip()
             link   = (a.get("url") or "").strip()
             if not titulo or not link: continue
@@ -152,7 +179,6 @@ def coletar_candidatos(empresas):
                 "resumo": "", "fonte": fonte,
                 "premium": eh_premium(fonte),
                 "data": data.strftime("%d/%m/%Y %H:%M"), "data_obj": data}
-        time.sleep(GDELT_PAUSA)
     return candidatos
 
 
