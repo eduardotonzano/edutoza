@@ -2,9 +2,27 @@
 resultado. So serve para confirmar que GEMINI_API_KEY + o modelo funcionam.
 Rodar: python _teste_ia.py
 """
+import os, requests
 from resumo_ia import preencher_resumos, ATIVADO, MODELO
 
 print(f"IA ativada: {ATIVADO} | modelo: {MODELO}")
+
+# Lista os modelos que ESTA chave aceita para generateContent (diagnostico).
+chave = os.environ.get("GEMINI_API_KEY", "")
+try:
+    r = requests.get("https://generativelanguage.googleapis.com/v1beta/models",
+                     params={"key": chave}, timeout=30)
+    if r.status_code == 200:
+        print("--- modelos disponiveis para generateContent ---")
+        for m in r.json().get("models", []):
+            if "generateContent" in m.get("supportedGenerationMethods", []):
+                print(" ", m["name"].replace("models/", ""))
+        print("--- fim da lista ---")
+    else:
+        print(f"ListModels HTTP {r.status_code}: {r.text[:200]}")
+except Exception as e:
+    print("ListModels erro:", str(e)[:120])
+
 exemplo = [{
     "nome": "Suzano",
     "titulo": "Suzano giant pulp mill to exceed nominal capacity",
