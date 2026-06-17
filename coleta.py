@@ -13,8 +13,9 @@ TIMEOUT       = 8      # segundos por artigo
 JANELA_HORAS  = 24
 GDELT_URL     = "https://api.gdeltproject.org/api/v2/doc/doc"
 GDELT_MAX     = 30     # artigos por empresa (menos volume = mais rapido e menos risco)
-GDELT_RETRIES = 4      # tentativas por empresa quando o GDELT vier erro (throttle/429)
-GDELT_PAUSA   = 4      # segundos entre empresas (o GDELT limita ~1 req a cada poucos seg)
+GDELT_RETRIES = 2      # tentativas por empresa quando o GDELT vier erro (throttle/429)
+GDELT_PAUSA   = 5      # segundos entre empresas (o GDELT limita ~1 req a cada poucos seg)
+GDELT_BUDGET  = 240    # teto de tempo (s) p/ a coleta GDELT: se estourar, segue com o que tem
 
 # LISTA BRANCA (allowlist): so noticias destas fontes Tier 1 sao aceitas. Qualquer
 # dominio que nao bata com um destes termos e descartado (corta sites de "fulano
@@ -218,14 +219,11 @@ def buscar_gdelt(termo):
                 ultimo_erro = "resposta nao-JSON"
             else:
                 ultimo_erro = f"HTTP {r.status_code}"
-                # 429 = throttle: o GDELT pede para esperar mais antes de tentar de novo.
-                if r.status_code == 429 and tentativa < GDELT_RETRIES - 1:
-                    time.sleep(6 * (tentativa + 1))   # 6s, 12s, 18s
-                    continue
         except Exception as e:
             ultimo_erro = str(e)[:60]
+        # Uma unica re-tentativa, com espera curta (nao escalar p/ nao estourar o tempo).
         if tentativa < GDELT_RETRIES - 1:
-            time.sleep(3 * (tentativa + 1))           # 3s, 6s, 9s
+            time.sleep(GDELT_PAUSA)
     if ultimo_erro:
         raise RuntimeError(ultimo_erro)
     return []
@@ -242,8 +240,16 @@ def coletar_candidatos(empresas):
     resultados = {}
     n_erros = 0
     n_com_artigos = 0
+    n_puladas = 0
     nomes = list(empresas.keys())
+    t0 = time.time()
     for i, nome in enumerate(nomes):
+        # Teto de tempo: se a coleta ja consumiu o orcamento (GDELT throttlando o IP),
+        # para e segue com o que ja deu - melhor um relatorio parcial que um run eterno.
+        if time.time() - t0 > GDELT_BUDGET:
+            n_puladas = len(nomes) - i
+            print(f"  GDELT: tempo esgotado ({GDELT_BUDGET}s); {n_puladas} empresas nao consultadas")
+            break
         cfg = empresas[nome]
         termo = cfg.get("busca") or (cfg["forte"][0] if cfg["forte"] else nome)
         try:
@@ -258,7 +264,7 @@ def coletar_candidatos(empresas):
             time.sleep(GDELT_PAUSA)
     total_bruto = sum(len(v) for v in resultados.values())
     print(f"  GDELT: {n_com_artigos}/{len(empresas)} empresas com artigos, "
-          f"{total_bruto} artigos brutos, {n_erros} erros de rede")
+          f"{total_bruto} artigos brutos, {n_erros} erros, {n_puladas} puladas (tempo)")
 
     # 2) Processa os resultados em ordem (dedup deterministico, sem threads).
     candidatos = {}
