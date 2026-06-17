@@ -3,16 +3,17 @@
 import re, time, json, unicodedata, base64, requests, trafilatura
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict, Counter
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
+from concurrent.futures.process import BrokenProcessPool
 
 # ----- Parametros ajustaveis -----
 MAX_POR_ATIVO = 4
-WORKERS       = 12     # downloads simultaneos. Se houver bloqueio (429/403), reduza para 6.
+WORKERS       = 8      # downloads simultaneos (processos isolados). Reduza p/ 4 se houver bloqueio.
 TIMEOUT       = 8      # segundos por artigo
 JANELA_HORAS  = 24
 GDELT_URL     = "https://api.gdeltproject.org/api/v2/doc/doc"
-GDELT_WORKERS = 8      # buscas simultaneas no GDELT (paraleliza as 53 consultas)
-GDELT_MAX     = 75     # artigos por empresa (max do GDELT e 250)
+GDELT_WORKERS = 8      # buscas simultaneas no GDELT
+GDELT_MAX     = 30     # artigos por empresa (menos volume = mais rapido e menos risco)
 
 # LISTA BRANCA (allowlist): so noticias destas fontes Tier 1 sao aceitas. Qualquer
 # dominio que nao bata com um destes termos e descartado (corta sites de "fulano
@@ -254,24 +255,40 @@ def coletar_candidatos(empresas):
     return candidatos
 
 
+def _baixar_tarefa(link):
+    """Tarefa de download rodada em PROCESSO isolado (resiste a crash nativo do parser)."""
+    real = link_real(link)
+    corpo, data_pub = baixar(real)
+    return link, real, corpo, data_pub
+
+
 def baixar_corpos(candidatos):
-    """Baixa os corpos em paralelo. Retorna {link: (link_real, corpo, data_pub)}."""
-    def tarefa(link):
-        real = link_real(link)
-        corpo, data_pub = baixar(real)
-        return link, real, corpo, data_pub
-    resultados = {}
+    """Baixa os corpos em PROCESSOS isolados. Se o parser (lxml/trafilatura) abortar
+    com crash nativo num artigo, o processo morre mas o run continua com o resto.
+    Retorna {link: (link_real, corpo, data_pub)}."""
+    resultados = {l: (l, "", None) for l in candidatos}   # default = sem corpo
+    resolvidos = set()
     t0 = time.time()
-    with ThreadPoolExecutor(max_workers=WORKERS) as ex:
-        futuros = [ex.submit(tarefa, l) for l in candidatos]
-        done = 0
-        for fut in as_completed(futuros):
-            link, real, corpo, data_pub = fut.result()
-            resultados[link] = (real, corpo, data_pub)
-            done += 1
-            if done % 50 == 0:
-                print(f"  {done}/{len(candidatos)} baixados ({time.time()-t0:.0f}s)")
-    print(f"  download concluido em {time.time()-t0:.0f}s")
+    for tentativa in range(3):                             # ate 3 passadas; recupera apos crash
+        pendentes = [l for l in candidatos if l not in resolvidos]
+        if not pendentes:
+            break
+        try:
+            with ProcessPoolExecutor(max_workers=WORKERS) as ex:
+                futuros = {ex.submit(_baixar_tarefa, l): l for l in pendentes}
+                for fut in as_completed(futuros):
+                    l = futuros[fut]
+                    try:
+                        link, real, corpo, data_pub = fut.result()
+                        resultados[link] = (real, corpo, data_pub)
+                    except Exception:
+                        pass
+                    resolvidos.add(l)
+        except BrokenProcessPool:
+            print(f"  aviso: parser abortou num artigo (passada {tentativa+1}); seguindo com o resto")
+    pulados = len(candidatos) - len(resolvidos)
+    print(f"  download concluido em {time.time()-t0:.0f}s "
+          f"({len(resolvidos)}/{len(candidatos)} ok, {pulados} pulados)")
     return resultados
 
 

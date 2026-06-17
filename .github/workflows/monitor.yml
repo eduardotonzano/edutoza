@@ -34,7 +34,7 @@ jobs:
         # ficam vazias e o resto roda normal. Pegue a chave em https://aistudio.google.com.
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python main.py --carteira Planilha_para_API.xlsx --saida relatorio.xlsx
+        run: python -u main.py --carteira Planilha_para_API.xlsx --saida relatorio.xlsx
 
       - name: Descobrir a data de hoje (Brasília)
         id: hoje
