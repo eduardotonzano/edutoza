@@ -40,12 +40,12 @@ def main():
     print(f"    {len(finais)} noticias validadas | {len(cont)}/{len(empresas)} ativos cobertos")
     print(f"    ({sem_corpo} sem corpo | {fora_janela} cortadas por data > 24h)")
 
-    print("4/5 Resumindo com IA (Claude Haiku)...")
+    print("4/5 Resumindo com IA (Google Gemini)...")
     if IA_ATIVA:
         n_res = preencher_resumos(finais)
         print(f"    {n_res} resumos gerados")
     else:
-        print("    (pulado: ANTHROPIC_API_KEY nao configurada)")
+        print("    (pulado: GEMINI_API_KEY nao configurada)")
 
     print("5/5 Gerando Excel...")
     arq, n_not, n_ativos = gerar_excel(finais, empresas, args.saida)

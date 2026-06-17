@@ -32,10 +32,11 @@ robusto e, idealmente, automatizado (rodar sozinho toda manhã).
 - Dedup por link E por título normalizado.
 - Fallback: se o corpo não baixar, valida pelo título + resumo do RSS.
 - Geração de Excel com 3 abas: NOTÍCIAS, RESUMO POR ATIVO, SEM COBERTURA.
-- **Resumo por IA (Claude Haiku):** `resumo_ia.py` preenche as colunas RESUMO IA e
-  IMPACTO de cada notícia via `claude-haiku-4-5`. É **opcional** — só roda se a
-  variável `ANTHROPIC_API_KEY` existir; sem ela, as colunas ficam vazias e o resto
-  roda normal. Falha por notícia é silenciosa (não derruba o run).
+- **Resumo por IA (Google Gemini, gratuito):** `resumo_ia.py` preenche as colunas
+  RESUMO IA e IMPACTO de cada notícia via `gemini-2.0-flash` (free tier do Google AI
+  Studio, sem custo). É **opcional** — só roda se a variável `GEMINI_API_KEY` existir;
+  sem ela, as colunas ficam vazias e o resto roda normal. Falha por notícia é
+  silenciosa (não derruba o run).
 
 ### O que FALTA / PRÓXIMOS PASSOS (pendências reais)
 1. **Calibração ao vivo:** a lógica foi testada em casos sintéticos, mas a coleta
@@ -50,7 +51,7 @@ robusto e, idealmente, automatizado (rodar sozinho toda manhã).
    empresa como ativo?" poderia refinar os casos ambíguos que o regex ainda erra.
 4. **Automação:** ✅ feito — GitHub Actions roda seg-sex às 17h e envia por e-mail.
 5. **Resumo por IA:** ✅ feito — `resumo_ia.py` preenche RESUMO IA e IMPACTO com o
-   Claude Haiku (precisa do segredo `ANTHROPIC_API_KEY`; ver seção de automação).
+   Google Gemini, gratuito (precisa do segredo `GEMINI_API_KEY`; ver seção de automação).
 
 ### Decisões de design importantes (não reverter sem pensar)
 - O dono pediu explicitamente: **zero falso positivo** (nada de notícia que não é
@@ -82,11 +83,12 @@ O arquivo `.github/workflows/monitor.yml` faz o monitor rodar sozinho de
 **últimas 24 horas**. Ao terminar, ele **envia o Excel por e-mail** e também
 deixa uma cópia anexada à execução (backup).
 
-### Resumo por IA (Claude Haiku) — opcional
+### Resumo por IA (Google Gemini, gratuito) — opcional
 Para preencher as colunas **RESUMO IA** e **IMPACTO**, cadastre o segredo
-`ANTHROPIC_API_KEY` (chave da API da Anthropic) em **Settings → Secrets and
-variables → Actions → New repository secret**. Sem ele, o robô pula a etapa de IA
-(colunas vazias) e o resto roda normal. Usa o modelo `claude-haiku-4-5` (barato).
+`GEMINI_API_KEY` em **Settings → Secrets and variables → Actions → New repository
+secret**. A chave é **gratuita**: pegue em https://aistudio.google.com → "Get API key"
+(começa com `AIza...`). Sem ela, o robô pula a etapa de IA (colunas vazias) e o resto
+roda normal. Usa o modelo `gemini-2.0-flash` (free tier, sem custo).
 
 ### Receber por e-mail (configurar uma vez só)
 O envio usa o Gmail. Você precisa cadastrar dois "segredos" no repositório:

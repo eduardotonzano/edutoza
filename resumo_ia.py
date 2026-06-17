@@ -1,18 +1,21 @@
-"""Resumo e impacto de cada noticia via Claude Haiku (claude-haiku-4-5).
+"""Resumo e impacto de cada noticia via Google Gemini (gemini-2.0-flash) - GRATUITO.
 
-Opcional: so roda se a variavel de ambiente ANTHROPIC_API_KEY existir. Sem chave,
-preencher_resumos() vira um no-op (as colunas RESUMO IA / IMPACTO ficam vazias)
-e o pipeline continua normalmente. Falha por noticia e silenciosa (nao derruba o run).
+Usa a API do Google AI Studio (free tier generoso, sem cartao). Opcional: so roda se
+a variavel de ambiente GEMINI_API_KEY existir. Sem a chave, preencher_resumos() vira
+um no-op (colunas RESUMO IA / IMPACTO ficam vazias) e o pipeline continua. Falha por
+noticia e silenciosa (nao derruba o run). Pegue a chave em https://aistudio.google.com.
 """
 
-import os, json
+import os, json, requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-MODELO  = "claude-haiku-4-5"   # rapido e barato, ideal para sumarizacao
-WORKERS = 4                    # resumos simultaneos
-ATIVADO = bool(os.environ.get("ANTHROPIC_API_KEY"))
+MODELO  = "gemini-2.0-flash"   # gratuito no free tier do Google AI Studio
+WORKERS = 3                    # resumos simultaneos (free tier ~15 req/min)
+TIMEOUT = 30
+ATIVADO = bool(os.environ.get("GEMINI_API_KEY"))
+_URL = "https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent"
 
-# Estrutura de saida garantida (structured outputs) - so resumo + impacto.
+# Saida estruturada garantida (JSON) - so resumo + impacto.
 _SCHEMA = {
     "type": "object",
     "properties": {
@@ -20,12 +23,11 @@ _SCHEMA = {
         "impacto": {"type": "string"},
     },
     "required": ["resumo", "impacto"],
-    "additionalProperties": False,
 }
 
 
-def _resumir_um(client, nome, titulo, corpo):
-    """Chama o Haiku para uma noticia. Retorna (resumo, impacto) ou ('','') em falha."""
+def _resumir_um(chave, nome, titulo, corpo):
+    """Chama o Gemini para uma noticia. Retorna (resumo, impacto) ou ('','') em falha."""
     texto = (corpo or "").strip()[:3000] or titulo
     prompt = (
         f"Voce e um analista de research buy-side. A noticia abaixo e sobre a empresa "
@@ -36,31 +38,38 @@ def _resumir_um(client, nome, titulo, corpo):
         f"- impacto: comece com 'Positivo', 'Negativo' ou 'Neutro' para a tese de "
         f"investimento em {nome}, seguido de meia frase de justificativa."
     )
+    body = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": _SCHEMA,
+            "maxOutputTokens": 500,
+            "temperature": 0.2,
+        },
+    }
     try:
-        r = client.messages.create(
-            model=MODELO,
-            max_tokens=400,
-            messages=[{"role": "user", "content": prompt}],
-            output_config={"format": {"type": "json_schema", "schema": _SCHEMA}},
-        )
-        txt = next(b.text for b in r.content if b.type == "text")
-        d = json.loads(txt)
+        r = requests.post(_URL.format(m=MODELO), params={"key": chave},
+                          json=body, timeout=TIMEOUT)
+        if r.status_code != 200:
+            print(f"  IA HTTP {r.status_code} em '{titulo[:35]}': {r.text[:80]}")
+            return "", ""
+        cand = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+        d = json.loads(cand)
         return (d.get("resumo", "") or "").strip(), (d.get("impacto", "") or "").strip()
     except Exception as e:
-        print(f"  IA falhou em '{titulo[:40]}': {str(e)[:60]}")
+        print(f"  IA falhou em '{titulo[:35]}': {str(e)[:60]}")
         return "", ""
 
 
 def preencher_resumos(finais):
-    """Preenche resumo_ia e impacto de cada noticia (em paralelo). No-op sem API key.
+    """Preenche resumo_ia e impacto de cada noticia (em paralelo). No-op sem GEMINI_API_KEY.
     Retorna a quantidade de resumos gerados com sucesso."""
-    if not ATIVADO or not finais:
+    chave = os.environ.get("GEMINI_API_KEY")
+    if not chave or not finais:
         return 0
-    import anthropic
-    client = anthropic.Anthropic()   # le ANTHROPIC_API_KEY do ambiente
 
     def tarefa(n):
-        return n, _resumir_um(client, n["nome"], n["titulo"], n.get("corpo", ""))
+        return n, _resumir_um(chave, n["nome"], n["titulo"], n.get("corpo", ""))
 
     feitos = 0
     with ThreadPoolExecutor(max_workers=WORKERS) as ex:
