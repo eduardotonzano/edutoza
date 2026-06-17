@@ -219,11 +219,16 @@ def buscar_gdelt(termo, maxrecords=GDELT_MAX):
                 ultimo_erro = "resposta nao-JSON"
             else:
                 ultimo_erro = f"HTTP {r.status_code}"
+                # 429 = o IP esta em cooldown no GDELT (tipico apos varias execucoes
+                # seguidas). Re-tentar nao adianta e so trava o run -> desiste rapido.
+                if r.status_code == 429:
+                    raise RuntimeError("HTTP 429 (GDELT em cooldown para este IP)")
+        except RuntimeError:
+            raise
         except Exception as e:
             ultimo_erro = str(e)[:60]
-        # Poucos lotes no total -> da para esperar o throttle passar (8s, 16s, ...).
         if tentativa < GDELT_RETRIES - 1:
-            time.sleep(8 * (tentativa + 1))
+            time.sleep(GDELT_PAUSA)
     if ultimo_erro:
         raise RuntimeError(ultimo_erro)
     return []
@@ -257,7 +262,13 @@ def coletar_candidatos(empresas):
             artigos.extend(buscar_gdelt(q, maxrecords=GDELT_MAX))
         except Exception as e:
             n_erros += 1
-            print(f"  GDELT erro no lote {i + 1}/{len(queries)}: {str(e)[:50]}")
+            msg = str(e)[:50]
+            print(f"  GDELT erro no lote {i + 1}/{len(queries)}: {msg}")
+            # Se o IP esta em cooldown (429), os outros lotes tambem vao falhar:
+            # nao adianta insistir, encerra a coleta e segue com o que tiver.
+            if "429" in msg:
+                print("  GDELT: IP em cooldown; pulando os lotes restantes")
+                break
         if i < len(queries) - 1:
             time.sleep(GDELT_PAUSA)
     print(f"  GDELT: {len(queries)} lotes, {len(artigos)} artigos brutos, {n_erros} erros")
