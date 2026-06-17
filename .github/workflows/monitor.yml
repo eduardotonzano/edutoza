@@ -2,10 +2,10 @@ name: Monitor de Notícias da Carteira
 
 # Quando rodar:
 on:
-  # 1) Sozinho, toda tarde (seg a sex) às 17:00 de Brasília (= 20:00 UTC).
+  # 1) Sozinho, TODOS OS DIAS às 17:00 de Brasília (= 20:00 UTC).
   #    Para mudar o horário, ajuste o número do meio (hora em UTC = BRT + 3).
   schedule:
-    - cron: "0 20 * * 1-5"
+    - cron: "0 20 * * *"
   # 2) Manualmente, pelo botão "Run workflow" na aba Actions.
   workflow_dispatch:
 
