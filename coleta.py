@@ -3,7 +3,7 @@
 import re, time, json, unicodedata, base64, requests, trafilatura
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict, Counter
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from concurrent.futures.process import BrokenProcessPool
 
 # ----- Parametros ajustaveis -----
@@ -12,10 +12,10 @@ WORKERS       = 8      # downloads simultaneos (processos isolados). Reduza p/ 4
 TIMEOUT       = 8      # segundos por artigo
 JANELA_HORAS  = 24
 GDELT_URL     = "https://api.gdeltproject.org/api/v2/doc/doc"
-GDELT_MAX     = 30     # artigos por empresa (menos volume = mais rapido e menos risco)
-GDELT_RETRIES = 2      # tentativas por empresa quando o GDELT vier erro (throttle/429)
-GDELT_PAUSA   = 5      # segundos entre empresas (o GDELT limita ~1 req a cada poucos seg)
-GDELT_BUDGET  = 240    # teto de tempo (s) p/ a coleta GDELT: se estourar, segue com o que tem
+GDELT_MAX     = 250    # artigos por consulta (250 = teto do GDELT DOC API)
+GDELT_RETRIES = 3      # tentativas por LOTE quando o GDELT vier erro (throttle/429)
+GDELT_PAUSA   = 6      # segundos entre lotes (o GDELT limita ~1 req a cada poucos seg)
+GDELT_BATCH   = 7      # empresas por lote: poucas consultas (OR) evitam o limite de taxa
 
 # LISTA BRANCA (allowlist): so noticias destas fontes Tier 1 sao aceitas. Qualquer
 # dominio que nao bata com um destes termos e descartado (corta sites de "fulano
@@ -198,12 +198,12 @@ def _data_gdelt(s):
     except Exception:
         return None
 
-def buscar_gdelt(termo):
-    """Consulta o GDELT DOC API para um termo (ultimas 24h). Retorna lista de artigos.
-    O termo e usado como query do GDELT (palavras separadas = E logico).
-    O GDELT limita a taxa de requisicoes: quando vier vazio/erro, tenta de novo com
-    backoff. Levanta a ultima excecao se TODAS as tentativas falharem por rede."""
-    params = {"query": termo, "mode": "ArtList", "maxrecords": str(GDELT_MAX),
+def buscar_gdelt(termo, maxrecords=GDELT_MAX):
+    """Consulta o GDELT DOC API para uma query (ultimas 24h). Retorna lista de artigos.
+    A query pode combinar empresas com OR, ex: '(Petrobras) OR (Vale mineracao)'.
+    O GDELT limita a taxa de requisicoes: quando vier 429/erro, tenta de novo com
+    backoff. Levanta a ultima excecao se TODAS as tentativas falharem."""
+    params = {"query": termo, "mode": "ArtList", "maxrecords": str(maxrecords),
               "timespan": f"{JANELA_HORAS}h", "format": "json", "sort": "datedesc"}
     ultimo_erro = None
     for tentativa in range(GDELT_RETRIES):
@@ -221,70 +221,65 @@ def buscar_gdelt(termo):
                 ultimo_erro = f"HTTP {r.status_code}"
         except Exception as e:
             ultimo_erro = str(e)[:60]
-        # Uma unica re-tentativa, com espera curta (nao escalar p/ nao estourar o tempo).
+        # Poucos lotes no total -> da para esperar o throttle passar (8s, 16s, ...).
         if tentativa < GDELT_RETRIES - 1:
-            time.sleep(GDELT_PAUSA)
+            time.sleep(8 * (tentativa + 1))
     if ultimo_erro:
         raise RuntimeError(ultimo_erro)
     return []
 
 
-def coletar_candidatos(empresas):
-    """Busca no GDELT por empresa (em paralelo), dedup por link e titulo, janela de 24h."""
-    limite = datetime.now(timezone.utc) - timedelta(hours=JANELA_HORAS)
+def _montar_lotes(empresas, tamanho):
+    """Agrupa as empresas em lotes e monta uma query OR por lote, ex:
+    '(Petrobras) OR (Vale mineracao) OR (WEG equipamentos)'. Cada termo entre
+    parenteses casa por E (palavras juntas); o OR une as empresas do lote."""
+    termos = []
+    for nome, cfg in empresas.items():
+        b = cfg.get("busca") or (cfg["forte"][0] if cfg["forte"] else nome)
+        termos.append(f"({b})")
+    lotes = [termos[i:i + tamanho] for i in range(0, len(termos), tamanho)]
+    return [" OR ".join(l) for l in lotes]
 
-    # 1) Busca SEQUENCIAL com pausa entre empresas. O GDELT limita a taxa de requisicoes
-    #    por IP (HTTP 429); disparar tudo em paralelo derruba a coleta. Pausar ~4s entre
-    #    consultas mantem a coleta dentro do limite. Usa o campo 'busca' (query dedicada)
-    #    quando existir; senao, o primeiro nome forte; senao, o nome da empresa.
-    resultados = {}
+
+def coletar_candidatos(empresas):
+    """Coleta no GDELT em POUCAS consultas (lotes com OR), dedup por link e titulo,
+    janela de 24h. O GDELT limita a taxa por IP (HTTP 429); 28 buscas separadas a
+    partir do IP compartilhado do GitHub eram barradas. Agrupando ~7 empresas por
+    consulta caem para ~4 requisicoes, dentro do limite. A atribuicao da noticia a
+    empresa certa e feita depois, no validar_todos (exige o nome no titulo)."""
+    limite = datetime.now(timezone.utc) - timedelta(hours=JANELA_HORAS)
+    queries = _montar_lotes(empresas, GDELT_BATCH)
+
+    artigos = []
     n_erros = 0
-    n_com_artigos = 0
-    n_puladas = 0
-    nomes = list(empresas.keys())
-    t0 = time.time()
-    for i, nome in enumerate(nomes):
-        # Teto de tempo: se a coleta ja consumiu o orcamento (GDELT throttlando o IP),
-        # para e segue com o que ja deu - melhor um relatorio parcial que um run eterno.
-        if time.time() - t0 > GDELT_BUDGET:
-            n_puladas = len(nomes) - i
-            print(f"  GDELT: tempo esgotado ({GDELT_BUDGET}s); {n_puladas} empresas nao consultadas")
-            break
-        cfg = empresas[nome]
-        termo = cfg.get("busca") or (cfg["forte"][0] if cfg["forte"] else nome)
+    for i, q in enumerate(queries):
         try:
-            resultados[nome] = buscar_gdelt(termo)
-            if resultados[nome]:
-                n_com_artigos += 1
+            artigos.extend(buscar_gdelt(q, maxrecords=GDELT_MAX))
         except Exception as e:
             n_erros += 1
-            print(f"  GDELT erro [{nome}]: {str(e)[:50]}")
-            resultados[nome] = []
-        if i < len(nomes) - 1:
+            print(f"  GDELT erro no lote {i + 1}/{len(queries)}: {str(e)[:50]}")
+        if i < len(queries) - 1:
             time.sleep(GDELT_PAUSA)
-    total_bruto = sum(len(v) for v in resultados.values())
-    print(f"  GDELT: {n_com_artigos}/{len(empresas)} empresas com artigos, "
-          f"{total_bruto} artigos brutos, {n_erros} erros, {n_puladas} puladas (tempo)")
+    print(f"  GDELT: {len(queries)} lotes, {len(artigos)} artigos brutos, {n_erros} erros")
 
-    # 2) Processa os resultados em ordem (dedup deterministico, sem threads).
+    # Dedup por link e por titulo normalizado; aplica janela de 24h e allowlist de fontes.
     candidatos = {}
     titulos_vistos = set()
-    for nome in empresas:
-        for a in resultados.get(nome, []):
-            titulo = (a.get("title") or "").strip()
-            link   = (a.get("url") or "").strip()
-            if not titulo or not link: continue
-            chave = norm(titulo)
-            if link in candidatos or chave in titulos_vistos: continue
-            data = _data_gdelt(a.get("seendate", ""))
-            if data is None or data < limite: continue
-            fonte = (a.get("domain") or "").strip()
-            if not fonte_ok(fonte): continue
-            titulos_vistos.add(chave)
-            candidatos[link] = {"titulo": titulo, "link": link,
-                "resumo": "", "fonte": fonte,
-                "premium": eh_premium(fonte),
-                "data": data.strftime("%d/%m/%Y %H:%M"), "data_obj": data}
+    for a in artigos:
+        titulo = (a.get("title") or "").strip()
+        link   = (a.get("url") or "").strip()
+        if not titulo or not link: continue
+        chave = norm(titulo)
+        if link in candidatos or chave in titulos_vistos: continue
+        data = _data_gdelt(a.get("seendate", ""))
+        if data is None or data < limite: continue
+        fonte = (a.get("domain") or "").strip()
+        if not fonte_ok(fonte): continue
+        titulos_vistos.add(chave)
+        candidatos[link] = {"titulo": titulo, "link": link,
+            "resumo": "", "fonte": fonte,
+            "premium": eh_premium(fonte),
+            "data": data.strftime("%d/%m/%Y %H:%M"), "data_obj": data}
     return candidatos
 
 
