@@ -7,7 +7,7 @@ citada de passagem) e gera um relatório em Excel.
 ## Para quem vai continuar este projeto (ex: Claude Code)
 
 Este projeto nasceu de uma longa sessão de iteração. O dono é um estagiário de
-research buy-side, **não-programador**, que precisa monitorar ~53 ativos (Brasil +
+research buy-side, **não-programador**, que precisa monitorar ~28 ativos (Brasil +
 exterior) e hoje roda tudo no Google Colab. O objetivo é evoluir para algo mais
 robusto e, idealmente, automatizado (rodar sozinho toda manhã).
 
@@ -63,7 +63,7 @@ robusto e, idealmente, automatizado (rodar sozinho toda manhã).
   evitar falsos positivos (Harrison Ford, La Roche-Posay, Merck KGaA alemã).
 
 ## Estrutura dos arquivos
-- `empresas.py`   — dicionário das 53 empresas (forte/fraco/contexto/ticker).
+- `empresas.py`   — dicionário das 28 empresas da carteira (busca/forte/fraco/contexto/ticker).
 - `coleta.py`     — busca no Google News, download paralelo, validação.
 - `excel.py`      — geração do relatório Excel.
 - `main.py`       — orquestra tudo (lê carteira → coleta → valida → Excel).

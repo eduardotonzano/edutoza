@@ -77,7 +77,12 @@ MACRO_TITULO = ["stock market today","market today","dow ","s&p 500","s & p 500"
     "stocks to watch","stocks to buy","top stocks","best stocks","movers","market movers",
     "mercado hoje","bolsas","fechamento","ibc-br","payrolls","fed rate","rate decision",
     "rate cut","rate hike","cpi ","inflation data","jobs report","gdp ","economy for stock",
-    "great economy","tariff","tariffs","live :","ao vivo","minuto a minuto"]
+    "great economy","tariff","tariffs","live :","ao vivo","minuto a minuto",
+    # macro/mercado em portugues
+    "ibovespa","ibov","selic","copom","pregao","pregão","dolar","dólar","cambio","câmbio",
+    "carteira recomendada","acoes para comprar","ações para comprar","melhores acoes",
+    "melhores ações","onde investir","dividendos para receber","radar do mercado",
+    "abertura de mercado","fechamento de mercado","bolsa sobe","bolsa cai","bolsa fecha"]
 # Manchetes de "filler"/clickbait/promocional: nao sao noticia real da empresa.
 FILLER_TITULO = ["invested in","worth this much","years ago would","5 years ago","10 years ago",
     "should you buy","is it time to buy","is a buy","a better buy","stock a buy","time to buy",
@@ -191,9 +196,9 @@ def _data_gdelt(s):
         return None
 
 def buscar_gdelt(termo):
-    """Consulta o GDELT DOC API para um termo (ultimas 24h). Retorna lista de artigos."""
-    q = f'"{termo}"' if " " in termo else termo   # frase entre aspas casa o nome inteiro
-    params = {"query": q, "mode": "ArtList", "maxrecords": str(GDELT_MAX),
+    """Consulta o GDELT DOC API para um termo (ultimas 24h). Retorna lista de artigos.
+    O termo e usado como query do GDELT (palavras separadas = E logico)."""
+    params = {"query": termo, "mode": "ArtList", "maxrecords": str(GDELT_MAX),
               "timespan": f"{JANELA_HORAS}h", "format": "json", "sort": "datedesc"}
     try:
         r = requests.get(GDELT_URL, params=params, headers=HEADERS, timeout=TIMEOUT + 6)
@@ -212,10 +217,12 @@ def coletar_candidatos(empresas):
     """Busca no GDELT por empresa (em paralelo), dedup por link e titulo, janela de 24h."""
     limite = datetime.now(timezone.utc) - timedelta(hours=JANELA_HORAS)
 
-    # 1) Dispara as 53 buscas em paralelo (era o gargalo: antes iam em fila ~11 min).
+    # 1) Dispara as buscas em paralelo. Usa o campo 'busca' (query dedicada) quando
+    #    existir; senao, o primeiro nome forte; senao, o nome da empresa.
     resultados = {}
     with ThreadPoolExecutor(max_workers=GDELT_WORKERS) as ex:
-        futuros = {ex.submit(buscar_gdelt, cfg["forte"][0] if cfg["forte"] else nome): nome
+        futuros = {ex.submit(buscar_gdelt,
+                             cfg.get("busca") or (cfg["forte"][0] if cfg["forte"] else nome)): nome
                    for nome, cfg in empresas.items()}
         for fut in as_completed(futuros):
             nome = futuros[fut]
