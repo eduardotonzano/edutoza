@@ -8,13 +8,20 @@ Cobertura: empresas BR da carteira (acoes + emissores de bonds/debentures/CDB/CR
 Emissores estrangeiros (US Govt, Citi, Oracle, etc.) sao tratados na etapa da SEC.
 """
 
-import csv, io, unicodedata, requests
+import csv, io, zipfile, unicodedata, requests
 from datetime import datetime, timezone, timedelta
 
 JANELA_HORAS = 24
 TIMEOUT = 40
 _ANO = datetime.now().year
-IPE_URL = f"https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/IPE/DADOS/ipe_cia_aberta_{_ANO}.csv"
+_BASE = "https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/IPE/DADOS"
+# A CVM serve esse dataset como .zip (com o .csv dentro). Tentamos varios formatos/anos
+# por robustez: .zip do ano atual, .csv do ano atual, .zip do ano anterior (virada de ano).
+IPE_URLS = [
+    f"{_BASE}/ipe_cia_aberta_{_ANO}.zip",
+    f"{_BASE}/ipe_cia_aberta_{_ANO}.csv",
+    f"{_BASE}/ipe_cia_aberta_{_ANO - 1}.zip",
+]
 CATEGORIAS = ("fato relevante", "comunicado ao mercado")
 
 
@@ -88,14 +95,32 @@ def buscar_fatos_relevantes():
     """Baixa o IPE da CVM, filtra fatos relevantes/comunicados das ultimas 24h das
     empresas da carteira e retorna itens no formato do relatorio. [] em qualquer falha."""
     limite = datetime.now(timezone.utc) - timedelta(hours=JANELA_HORAS)
-    try:
-        r = requests.get(IPE_URL, timeout=TIMEOUT)
+    texto = None
+    for url in IPE_URLS:
+        try:
+            r = requests.get(url, timeout=TIMEOUT)
+        except Exception as e:
+            print(f"  CVM erro de rede ({url.rsplit('/', 1)[-1]}): {str(e)[:60]}")
+            continue
         if r.status_code != 200 or not r.content:
-            print(f"  CVM HTTP {r.status_code}")
-            return []
-        texto = r.content.decode("latin-1", errors="ignore")
-    except Exception as e:
-        print(f"  CVM erro de rede: {str(e)[:80]}")
+            print(f"  CVM HTTP {r.status_code} ({url.rsplit('/', 1)[-1]})")
+            continue
+        try:
+            if url.endswith(".zip"):
+                zf = zipfile.ZipFile(io.BytesIO(r.content))
+                nome_csv = next((n for n in zf.namelist() if n.lower().endswith(".csv")), None)
+                if not nome_csv:
+                    print(f"  CVM zip sem csv ({url.rsplit('/', 1)[-1]})")
+                    continue
+                texto = zf.read(nome_csv).decode("latin-1", errors="ignore")
+            else:
+                texto = r.content.decode("latin-1", errors="ignore")
+        except Exception as e:
+            print(f"  CVM erro lendo arquivo ({url.rsplit('/', 1)[-1]}): {str(e)[:60]}")
+            continue
+        if texto:
+            break
+    if not texto:
         return []
 
     leitor = csv.DictReader(io.StringIO(texto), delimiter=";")

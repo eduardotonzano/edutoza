@@ -12,8 +12,9 @@ WORKERS       = 8      # downloads simultaneos (processos isolados). Reduza p/ 4
 TIMEOUT       = 8      # segundos por artigo
 JANELA_HORAS  = 24
 GDELT_URL     = "https://api.gdeltproject.org/api/v2/doc/doc"
-GDELT_WORKERS = 8      # buscas simultaneas no GDELT
+GDELT_WORKERS = 3      # buscas simultaneas no GDELT (poucas: o GDELT limita ~1 req/poucos seg)
 GDELT_MAX     = 30     # artigos por empresa (menos volume = mais rapido e menos risco)
+GDELT_RETRIES = 3      # tentativas por empresa quando o GDELT vier vazio/erro (throttle)
 
 # LISTA BRANCA (allowlist): so noticias destas fontes Tier 1 sao aceitas. Qualquer
 # dominio que nao bata com um destes termos e descartado (corta sites de "fulano
@@ -198,20 +199,31 @@ def _data_gdelt(s):
 
 def buscar_gdelt(termo):
     """Consulta o GDELT DOC API para um termo (ultimas 24h). Retorna lista de artigos.
-    O termo e usado como query do GDELT (palavras separadas = E logico)."""
+    O termo e usado como query do GDELT (palavras separadas = E logico).
+    O GDELT limita a taxa de requisicoes: quando vier vazio/erro, tenta de novo com
+    backoff. Levanta a ultima excecao se TODAS as tentativas falharem por rede."""
     params = {"query": termo, "mode": "ArtList", "maxrecords": str(GDELT_MAX),
               "timespan": f"{JANELA_HORAS}h", "format": "json", "sort": "datedesc"}
-    try:
-        r = requests.get(GDELT_URL, params=params, headers=HEADERS, timeout=TIMEOUT + 6)
-        if r.status_code != 200 or not r.text.strip():
-            return []
+    ultimo_erro = None
+    for tentativa in range(GDELT_RETRIES):
         try:
-            data = r.json()   # GDELT as vezes responde texto de erro em vez de JSON
-        except ValueError:
-            return []
-        return data.get("articles", []) or []
-    except Exception:
-        return []
+            r = requests.get(GDELT_URL, params=params, headers=HEADERS, timeout=TIMEOUT + 6)
+            if r.status_code == 200 and r.text.strip():
+                try:
+                    data = r.json()   # GDELT as vezes responde texto de erro em vez de JSON
+                except ValueError:
+                    data = None
+                if data is not None:
+                    return data.get("articles", []) or []
+            # 429/erro/vazio -> espera e tenta de novo (backoff: 2s, 4s, 8s)
+            ultimo_erro = f"HTTP {r.status_code}"
+        except Exception as e:
+            ultimo_erro = str(e)[:60]
+        if tentativa < GDELT_RETRIES - 1:
+            time.sleep(2 * (tentativa + 1))
+    if ultimo_erro:
+        raise RuntimeError(ultimo_erro)
+    return []
 
 
 def coletar_candidatos(empresas):
@@ -221,6 +233,8 @@ def coletar_candidatos(empresas):
     # 1) Dispara as buscas em paralelo. Usa o campo 'busca' (query dedicada) quando
     #    existir; senao, o primeiro nome forte; senao, o nome da empresa.
     resultados = {}
+    n_erros = 0
+    n_com_artigos = 0
     with ThreadPoolExecutor(max_workers=GDELT_WORKERS) as ex:
         futuros = {ex.submit(buscar_gdelt,
                              cfg.get("busca") or (cfg["forte"][0] if cfg["forte"] else nome)): nome
@@ -229,9 +243,15 @@ def coletar_candidatos(empresas):
             nome = futuros[fut]
             try:
                 resultados[nome] = fut.result()
+                if resultados[nome]:
+                    n_com_artigos += 1
             except Exception as e:
-                print(f"  {nome}: erro {str(e)[:40]}")
+                n_erros += 1
+                print(f"  GDELT erro [{nome}]: {str(e)[:50]}")
                 resultados[nome] = []
+    total_bruto = sum(len(v) for v in resultados.values())
+    print(f"  GDELT: {n_com_artigos}/{len(empresas)} empresas com artigos, "
+          f"{total_bruto} artigos brutos, {n_erros} erros de rede")
 
     # 2) Processa os resultados em ordem (dedup deterministico, sem threads).
     candidatos = {}
