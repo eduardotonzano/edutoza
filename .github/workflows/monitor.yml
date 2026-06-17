@@ -35,11 +35,19 @@ jobs:
         id: hoje
         run: echo "data=$(TZ=America/Sao_Paulo date '+%d/%m/%Y')" >> "$GITHUB_OUTPUT"
 
-      # Envia o Excel por e-mail. Precisa de 2 "segredos" cadastrados no
-      # repositório (Settings > Secrets and variables > Actions):
+      - name: Publicar o relatório (Excel) como artefato (backup)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorio-noticias
+          path: relatorio.xlsx
+          retention-days: 90
+
+      # ETAPA FINAL: envia o Excel por e-mail. Precisa de 2 "segredos"
+      # cadastrados no repositório (Settings > Secrets and variables > Actions):
       #   MAIL_USERNAME = seu e-mail do Gmail
       #   MAIL_PASSWORD = uma "Senha de app" do Gmail (16 letras)
-      - name: Enviar o relatório por e-mail
+      - name: Enviar o relatório por e-mail (etapa final)
         # Só envia se os segredos do e-mail já estiverem cadastrados.
         # Enquanto não estiverem, esta etapa é pulada (sem dar erro).
         if: ${{ env.MAIL_USERNAME != '' && env.MAIL_PASSWORD != '' }}
@@ -64,11 +72,3 @@ jobs:
 
             Abra o arquivo "relatorio.xlsx" anexado.
           attachments: relatorio.xlsx
-
-      - name: Publicar o relatório (Excel) como artefato (backup)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: relatorio-noticias
-          path: relatorio.xlsx
-          retention-days: 90
