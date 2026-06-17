@@ -1,7 +1,6 @@
-"""Coleta de noticias (Google News RSS), download paralelo e validacao de relevancia."""
+"""Coleta de noticias (GDELT DOC API), download paralelo e validacao de relevancia."""
 
-import re, time, unicodedata, urllib.parse, base64, requests, trafilatura
-import feedparser
+import re, time, unicodedata, base64, requests, trafilatura
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict, Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -11,6 +10,9 @@ MAX_POR_ATIVO = 4
 WORKERS       = 12     # downloads simultaneos. Se houver bloqueio (429/403), reduza para 6.
 TIMEOUT       = 8      # segundos por artigo
 JANELA_HORAS  = 24
+GDELT_URL     = "https://api.gdeltproject.org/api/v2/doc/doc"
+GDELT_PAUSA   = 1.0    # segundos entre consultas (respeita o rate limit do GDELT)
+GDELT_MAX     = 75     # artigos por empresa (max do GDELT e 250)
 
 FONTES_BLOQUEADAS = ["reddit","facebook","twitter","x.com","instagram","tiktok","youtube",
     "medium.com","quora","blogspot","wordpress.com","substack","tradingview",
@@ -98,43 +100,59 @@ def eh_premium(fonte):
     f = norm(fonte)
     return any(p in f for p in FONTES_PREMIUM)
 
-def _data_entry(e):
-    for campo in ("published_parsed","updated_parsed"):
-        v = e.get(campo)
-        if v:
-            try: return datetime(*v[:6], tzinfo=timezone.utc)
-            except: pass
-    return None
+def _data_gdelt(s):
+    """Converte o seendate do GDELT (ex 20240617T120000Z) em datetime UTC."""
+    try:
+        return datetime.strptime(s, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+def buscar_gdelt(termo):
+    """Consulta o GDELT DOC API para um termo (ultimas 24h). Retorna lista de artigos."""
+    q = f'"{termo}"' if " " in termo else termo   # frase entre aspas casa o nome inteiro
+    params = {"query": q, "mode": "ArtList", "maxrecords": str(GDELT_MAX),
+              "timespan": f"{JANELA_HORAS}h", "format": "json", "sort": "datedesc"}
+    try:
+        r = requests.get(GDELT_URL, params=params, headers=HEADERS, timeout=TIMEOUT + 6)
+        if r.status_code != 200 or not r.text.strip():
+            return []
+        try:
+            data = r.json()   # GDELT as vezes responde texto de erro em vez de JSON
+        except ValueError:
+            return []
+        return data.get("articles", []) or []
+    except Exception:
+        return []
 
 
 def coletar_candidatos(empresas):
-    """Busca no Google News por empresa, dedup por link e por titulo, janela de 24h."""
+    """Busca no GDELT por empresa, dedup por link e por titulo, janela de 24h."""
     limite = datetime.now(timezone.utc) - timedelta(hours=JANELA_HORAS)
     candidatos = {}
     titulos_vistos = set()
     for nome, cfg in empresas.items():
         termo = cfg["forte"][0] if cfg["forte"] else nome
-        q = urllib.parse.quote(f'{termo} when:1d')
-        url = f"https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en"
         try:
-            feed = feedparser.parse(url)
-            for e in feed.entries:
-                titulo = e.get("title","").strip()
-                link   = e.get("link","").strip()
-                if not titulo or not link: continue
-                chave = norm(titulo)
-                if link in candidatos or chave in titulos_vistos: continue
-                data = _data_entry(e)
-                if data is None or data < limite: continue
-                fonte = e.get("source",{}).get("title","") if e.get("source") else ""
-                if not fonte_ok(fonte): continue
-                titulos_vistos.add(chave)
-                candidatos[link] = {"titulo": titulo, "link": link,
-                    "resumo": e.get("summary",""), "fonte": fonte,
-                    "premium": eh_premium(fonte),
-                    "data": data.strftime("%d/%m/%Y %H:%M"), "data_obj": data}
+            artigos = buscar_gdelt(termo)
         except Exception as ex:
             print(f"  {nome}: erro {str(ex)[:40]}")
+            artigos = []
+        for a in artigos:
+            titulo = (a.get("title") or "").strip()
+            link   = (a.get("url") or "").strip()
+            if not titulo or not link: continue
+            chave = norm(titulo)
+            if link in candidatos or chave in titulos_vistos: continue
+            data = _data_gdelt(a.get("seendate", ""))
+            if data is None or data < limite: continue
+            fonte = (a.get("domain") or "").strip()
+            if not fonte_ok(fonte): continue
+            titulos_vistos.add(chave)
+            candidatos[link] = {"titulo": titulo, "link": link,
+                "resumo": "", "fonte": fonte,
+                "premium": eh_premium(fonte),
+                "data": data.strftime("%d/%m/%Y %H:%M"), "data_obj": data}
+        time.sleep(GDELT_PAUSA)
     return candidatos
 
 

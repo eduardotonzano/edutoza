@@ -11,6 +11,8 @@ on:
 
 jobs:
   monitorar:
+    # Roda no runner gratuito do GitHub (na nuvem). A coleta usa o GDELT,
+    # que não bloqueia IPs de datacenter, então não precisa de máquina sua.
     runs-on: ubuntu-latest
     steps:
       - name: Baixar o código

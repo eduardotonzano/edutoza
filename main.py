@@ -26,7 +26,7 @@ def main():
     empresas = carregar_tickers(df)
     print(f"    {len(empresas)} empresas carregadas")
 
-    print("2/4 Coletando candidatos no Google News...")
+    print("2/4 Coletando candidatos no GDELT...")
     candidatos = coletar_candidatos(empresas)
     print(f"    {len(candidatos)} candidatos unicos")
 

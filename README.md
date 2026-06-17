@@ -12,8 +12,9 @@ exterior) e hoje roda tudo no Google Colab. O objetivo é evoluir para algo mais
 robusto e, idealmente, automatizado (rodar sozinho toda manhã).
 
 ### O que JÁ funciona (validado em lógica)
-- Coleta por empresa via Google News RSS (busca dedicada por nome, últimas 24h).
-- Decodificação do link real do Google News (vem em base64).
+- Coleta por empresa via **GDELT DOC API** (gratuita, sem chave, busca dedicada
+  por nome, últimas 24h). Trocada do Google News RSS porque o GDELT não bloqueia
+  servidores de nuvem, permitindo rodar de graça no GitHub Actions.
 - Validador de relevância em dois caminhos:
   - **A) protagonista:** empresa no título, primeira metade, idealmente com verbo de ação.
   - **B) corpo forte:** empresa não está no título mas aparece com força no corpo + contexto.
@@ -88,7 +89,9 @@ aparece em **Artifacts**.
 No `monitor.yml`, na linha `cron: "0 11 * * 1-5"`, o `11` é a hora **em UTC**.
 Brasília = UTC−3, então `11` = 08:00 daqui. Ex.: para 07:00 de Brasília, use `10`.
 
-> ⚠️ **Atenção (rede):** o Google News às vezes bloqueia (HTTP 403) requisições
-> vindas de servidores de nuvem (é o caso do GitHub Actions e do Colab em IP de
-> datacenter). Se uma execução vier vazia (tudo em "SEM COBERTURA"), foi bloqueio
-> de rede, não erro do código — rodar na sua máquina/internet normal resolve.
+> ℹ️ **Sobre a fonte (GDELT):** a coleta usa o GDELT, que aceita requisições de
+> servidores de nuvem — por isso roda de graça no GitHub Actions sem precisar de
+> máquina sua ligada. O GDELT tem um limite informal de ~1 consulta a cada poucos
+> segundos; por isso o código já espera 1s entre empresas (parâmetro `GDELT_PAUSA`
+> em `coleta.py`). Se uma execução vier muito vazia, geralmente é só o GDELT ainda
+> não ter indexado as matérias daquela manhã — rodar de novo mais tarde resolve.
