@@ -12,15 +12,15 @@ import csv, io, zipfile, unicodedata, requests
 from datetime import datetime, timezone, timedelta
 
 JANELA_HORAS = 24
-TIMEOUT = 40
+# (connect, read): a CVM as vezes nao responde a partir de IPs de datacenter (GitHub).
+# Timeout curto para nao travar o run quando o host estiver inacessivel.
+TIMEOUT = (8, 20)
 _ANO = datetime.now().year
 _BASE = "https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/IPE/DADOS"
-# A CVM serve esse dataset como .zip (com o .csv dentro). Tentamos varios formatos/anos
-# por robustez: .zip do ano atual, .csv do ano atual, .zip do ano anterior (virada de ano).
+# A CVM serve esse dataset como .zip (com o .csv dentro). Tentamos .zip e .csv por robustez.
 IPE_URLS = [
     f"{_BASE}/ipe_cia_aberta_{_ANO}.zip",
     f"{_BASE}/ipe_cia_aberta_{_ANO}.csv",
-    f"{_BASE}/ipe_cia_aberta_{_ANO - 1}.zip",
 ]
 CATEGORIAS = ("fato relevante", "comunicado ao mercado")
 

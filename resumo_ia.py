@@ -46,7 +46,10 @@ def _resumir_um(chave, nome, titulo, corpo):
         "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": _SCHEMA,
-            "maxOutputTokens": 500,
+            # Folga grande: os modelos 2.5 "pensam" antes de responder e o pensamento
+            # consome o orcamento; com pouco teto o JSON volta cortado ("Unterminated
+            # string"). 2048 deixa espaco para o raciocinio + o JSON completo.
+            "maxOutputTokens": 2048,
             "temperature": 0.2,
         },
     }
