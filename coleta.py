@@ -33,6 +33,29 @@ FONTES_TIER1 = [
     # Europa
     "handelsblatt", "lesechos", "lemonde", "boersen", "boerse", "ilsole24ore", "repubblica",
 ]
+# TIER 1.5: fontes serias, porem nao-elite (imprensa financeira de 2a linha e trade
+# press setorial). Aumentam a cobertura com ruido baixo. NAO inclui sites de "fulano
+# comprou X acoes" nem PR wires. Para voltar ao Tier 1 estrito, basta esvaziar esta lista.
+FONTES_TIER1_5 = [
+    # Imprensa/analise financeira solida
+    "seekingalpha", "investing.com", "benzinga", "marketscreener", "morningstar",
+    "thestreet", "investors.com", "nasdaq.com", "zacks", "quartz", "qz.com",
+    # Saude / pharma (BMY, Lilly, Merck, JNJ, Novartis, Roche, AbbVie, Sandoz)
+    "statnews", "endpts", "endpoints", "fiercepharma", "fiercebiotech",
+    # Auto / industria (Ford, BMW, Toyota, Caterpillar, ABB)
+    "autonews", "automotivenews", "electrek", "insideevs",
+    # Energia (BP, Chevron, Conoco, Marathon, Pemex, Cosan)
+    "rigzone", "hartenergy", "upstreamonline", "spglobal",
+    # Bancos
+    "americanbanker",
+    # Brasil
+    "cnnbrasil", "suno.com", "seudinheiro", "einvestidor", "e-investidor",
+    # Setor papel/celulose (Suzano)
+    "pulpapernews", "risiinfo",
+]
+# Lista efetiva de fontes aceitas (Tier 1 + Tier 1.5).
+FONTES_ACEITAS = FONTES_TIER1 + FONTES_TIER1_5
+
 # Subconjunto "top" usado apenas como bonus de pontuacao (desempate).
 FONTES_PREMIUM = ["reuters","bloomberg","cnbc","financial times","ft.com","wall street journal",
     "wsj","marketwatch","barron","forbes","fortune","valor","infomoney",
@@ -109,10 +132,10 @@ def validar(titulo, corpo, resumo, cfg, premium=False):
     return 0
 
 def fonte_ok(fonte):
-    """So aceita fontes Tier 1 (allowlist). Sem fonte identificada -> rejeita."""
+    """So aceita fontes Tier 1 / Tier 1.5 (allowlist). Sem fonte identificada -> rejeita."""
     f = norm(fonte)
     if not f: return False
-    return any(t in f for t in FONTES_TIER1)
+    return any(t in f for t in FONTES_ACEITAS)
 
 def eh_premium(fonte):
     f = norm(fonte)

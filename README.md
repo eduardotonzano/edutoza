@@ -20,7 +20,9 @@ robusto e, idealmente, automatizado (rodar sozinho toda manhã).
   - **B) corpo forte:** empresa não está no título mas aparece com força no corpo + contexto.
 - Estrutura de nomes em 3 níveis por empresa: `forte` (inequívoco), `fraco`
   (ambíguo, exige contexto) e `contexto` (termos de setor/produto/executivo).
-- Filtro de fontes por **blocklist** (barra fórum/spam) + bônus para fontes premium.
+- Filtro de fontes por **allowlist Tier 1 / Tier 1.5** (em `coleta.py`): só passa
+  imprensa de primeira/segunda linha e trade press setorial; tudo fora da lista é
+  descartado (corta sites de "fulano comprou X ações" e agregadores).
 - Download em paralelo (ThreadPoolExecutor) com timeout real no request.
 - Dedup por link E por título normalizado.
 - Fallback: se o corpo não baixar, valida pelo título + resumo do RSS.
