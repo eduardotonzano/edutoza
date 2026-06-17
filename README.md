@@ -12,9 +12,13 @@ exterior) e hoje roda tudo no Google Colab. O objetivo é evoluir para algo mais
 robusto e, idealmente, automatizado (rodar sozinho toda manhã).
 
 ### O que JÁ funciona (validado em lógica)
-- Coleta por empresa via **GDELT DOC API** (gratuita, sem chave, busca dedicada
-  por nome, últimas 24h). Trocada do Google News RSS porque o GDELT não bloqueia
-  servidores de nuvem, permitindo rodar de graça no GitHub Actions.
+- Coleta via **GDELT DOC API** (gratuita, sem chave, últimas 24h). Trocada do
+  Google News RSS porque o GDELT aceita IPs de nuvem, permitindo rodar de graça
+  no GitHub Actions. A coleta é feita em **poucas consultas em lote** (≈7 empresas
+  por consulta, unidas por `OR`) em vez de 1 busca por empresa — o GDELT limita a
+  taxa por IP e barra dezenas de buscas seguidas a partir do IP compartilhado do
+  GitHub. A atribuição da notícia à empresa certa acontece depois, na validação
+  (que exige o nome no título), então a precisão não muda.
 - Validador de relevância focado em notícia **sobre a empresa** (não citação de passagem):
   - **Exige a empresa no TÍTULO** (nome forte; ou nome fraco + termo de contexto).
   - **Rejeita manchetes macro/mercado** (lista `MACRO_TITULO`: "Stocks Soar", "Dow/S&P/
@@ -49,7 +53,7 @@ robusto e, idealmente, automatizado (rodar sozinho toda manhã).
 3. **IA na decisão de relevância (futuro):** hoje a IA só resume/avalia impacto
    (depois do filtro por regex). Uma etapa de LLM julgando "esta notícia é sobre a
    empresa como ativo?" poderia refinar os casos ambíguos que o regex ainda erra.
-4. **Automação:** ✅ feito — GitHub Actions roda seg-sex às 17h e envia por e-mail.
+4. **Automação:** ✅ feito — GitHub Actions roda **todos os dias** às 17h e envia por e-mail.
 5. **Resumo por IA:** ✅ feito — `resumo_ia.py` preenche RESUMO IA e IMPACTO com o
    Google Gemini, gratuito (precisa do segredo `GEMINI_API_KEY`; ver seção de automação).
 
@@ -78,10 +82,10 @@ A planilha precisa ter uma aba `CARTEIRA` com colunas `TICKER` e `NOME`.
 
 ## Automação (GitHub Actions) — roda sozinho toda tarde e envia por e-mail
 
-O arquivo `.github/workflows/monitor.yml` faz o monitor rodar sozinho de
-**segunda a sexta às 17:00 de Brasília** (20:00 UTC), olhando as notícias das
-**últimas 24 horas**. Ao terminar, ele **envia o Excel por e-mail** e também
-deixa uma cópia anexada à execução (backup).
+O arquivo `.github/workflows/monitor.yml` faz o monitor rodar sozinho **todos os
+dias às 17:00 de Brasília** (20:00 UTC), olhando as notícias das **últimas 24
+horas**. Ao terminar, ele **envia o Excel por e-mail** e também deixa uma cópia
+anexada à execução (backup).
 
 ### Resumo por IA (Google Gemini, gratuito) — opcional
 Para preencher as colunas **RESUMO IA** e **IMPACTO**, cadastre o segredo
@@ -115,12 +119,21 @@ Na aba **Actions** → **Monitor de Notícias da Carteira** → botão
 **Run workflow** (canto direito) → **Run workflow**.
 
 ### Mudar o horário
-No `monitor.yml`, na linha `cron: "0 20 * * 1-5"`, o `20` é a hora **em UTC**.
+No `monitor.yml`, na linha `cron: "0 20 * * *"`, o `20` é a hora **em UTC**.
 Brasília = UTC−3, então `20` = 17:00 daqui. Ex.: para 18:00 de Brasília, use `21`.
 
-> ℹ️ **Sobre a fonte (GDELT):** a coleta usa o GDELT, que aceita requisições de
-> servidores de nuvem — por isso roda de graça no GitHub Actions sem precisar de
-> máquina sua ligada. O GDELT tem um limite informal de ~1 consulta a cada poucos
-> segundos; por isso o código já espera 1s entre empresas (parâmetro `GDELT_PAUSA`
-> em `coleta.py`). Se uma execução vier muito vazia, geralmente é só o GDELT ainda
-> não ter indexado as matérias daquela manhã — rodar de novo mais tarde resolve.
+> ℹ️ **Sobre a fonte (GDELT) e o limite por IP:** a coleta usa o GDELT, que aceita
+> requisições de servidores de nuvem — por isso roda de graça no GitHub Actions. O
+> GDELT limita a taxa **por IP**: o IP do GitHub Actions é compartilhado por muita
+> gente, então **rodar o monitor várias vezes seguidas** (vários "Run workflow" em
+> sequência) coloca o IP em *cooldown* e o GDELT passa a responder `HTTP 429` (a
+> coleta volta vazia). Isso **não acontece na operação normal** (1 execução por dia,
+> ~4 consultas em lote). Se precisar testar manualmente, espere algumas horas entre
+> execuções. Quando há 429, o robô **desiste rápido** (não trava) e segue o resto do
+> pipeline; o e-mail é enviado mesmo assim, só com menos (ou nenhuma) notícia.
+>
+> ℹ️ **Sobre a CVM (fatos relevantes):** o passo 3.5 baixa o feed oficial de fatos
+> relevantes em `dados.cvm.gov.br`. Esse host às vezes recusa conexões vindas de
+> IPs de datacenter (timeout); por isso o passo tem timeout curto e é "melhor
+> esforço" — se a CVM não responder, o robô apenas segue sem os fatos relevantes
+> (sem derrubar o run).
