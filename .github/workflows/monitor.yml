@@ -2,10 +2,10 @@ name: Monitor de Notícias da Carteira
 
 # Quando rodar:
 on:
-  # 1) Sozinho, toda manhã (seg a sex) às 08:00 de Brasília (= 11:00 UTC).
-  #    Para mudar o horário, ajuste o número do meio (hora em UTC).
+  # 1) Sozinho, toda tarde (seg a sex) às 17:00 de Brasília (= 20:00 UTC).
+  #    Para mudar o horário, ajuste o número do meio (hora em UTC = BRT + 3).
   schedule:
-    - cron: "0 11 * * 1-5"
+    - cron: "0 20 * * 1-5"
   # 2) Manualmente, pelo botão "Run workflow" na aba Actions.
   workflow_dispatch:
 
@@ -31,7 +31,41 @@ jobs:
       - name: Rodar o monitor
         run: python main.py --carteira Planilha_para_API.xlsx --saida relatorio.xlsx
 
-      - name: Publicar o relatório (Excel) como artefato
+      - name: Descobrir a data de hoje (Brasília)
+        id: hoje
+        run: echo "data=$(TZ=America/Sao_Paulo date '+%d/%m/%Y')" >> "$GITHUB_OUTPUT"
+
+      # Envia o Excel por e-mail. Precisa de 2 "segredos" cadastrados no
+      # repositório (Settings > Secrets and variables > Actions):
+      #   MAIL_USERNAME = seu e-mail do Gmail
+      #   MAIL_PASSWORD = uma "Senha de app" do Gmail (16 letras)
+      - name: Enviar o relatório por e-mail
+        # Só envia se os segredos do e-mail já estiverem cadastrados.
+        # Enquanto não estiverem, esta etapa é pulada (sem dar erro).
+        if: ${{ env.MAIL_USERNAME != '' && env.MAIL_PASSWORD != '' }}
+        env:
+          MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "Notícias da Carteira - ${{ steps.hoje.outputs.data }}"
+          to: eduardotonzano@gmail.com
+          from: Monitor de Notícias <${{ secrets.MAIL_USERNAME }}>
+          body: |
+            Bom dia/boa tarde!
+
+            Segue em anexo o relatório com as notícias relevantes da carteira
+            nas últimas 24 horas (${{ steps.hoje.outputs.data }}).
+
+            Abra o arquivo "relatorio.xlsx" anexado.
+          attachments: relatorio.xlsx
+
+      - name: Publicar o relatório (Excel) como artefato (backup)
         if: always()
         uses: actions/upload-artifact@v4
         with:
