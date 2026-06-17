@@ -29,6 +29,11 @@ jobs:
           pip install -r requirements.txt
 
       - name: Rodar o monitor
+        # ANTHROPIC_API_KEY (opcional): se cadastrado em Settings > Secrets, o robo
+        # preenche RESUMO IA e IMPACTO com o Claude Haiku. Sem ele, essas colunas
+        # ficam vazias e o resto roda normal.
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python main.py --carteira Planilha_para_API.xlsx --saida relatorio.xlsx
 
       - name: Descobrir a data de hoje (Brasília)

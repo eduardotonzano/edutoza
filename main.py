@@ -13,6 +13,7 @@ import pandas as pd
 from empresas import EMPRESAS, carregar_tickers
 from coleta import coletar_candidatos, baixar_corpos, validar_todos
 from excel import gerar_excel
+from resumo_ia import preencher_resumos, ATIVADO as IA_ATIVA
 
 
 def main():
@@ -21,16 +22,16 @@ def main():
     ap.add_argument("--saida", default=None, help="nome do Excel de saida (opcional)")
     args = ap.parse_args()
 
-    print("1/4 Lendo carteira...")
+    print("1/5 Lendo carteira...")
     df = pd.read_excel(args.carteira, sheet_name="CARTEIRA")
     empresas = carregar_tickers(df)
     print(f"    {len(empresas)} empresas carregadas")
 
-    print("2/4 Coletando candidatos no GDELT...")
+    print("2/5 Coletando candidatos no GDELT...")
     candidatos = coletar_candidatos(empresas)
     print(f"    {len(candidatos)} candidatos unicos")
 
-    print("3/4 Baixando corpos em paralelo e validando relevancia...")
+    print("3/5 Baixando corpos em paralelo e validando relevancia...")
     corpos = baixar_corpos(candidatos)
     finais, sem_corpo, fora_janela = validar_todos(candidatos, corpos, empresas)
 
@@ -39,7 +40,14 @@ def main():
     print(f"    {len(finais)} noticias validadas | {len(cont)}/{len(empresas)} ativos cobertos")
     print(f"    ({sem_corpo} sem corpo | {fora_janela} cortadas por data > 24h)")
 
-    print("4/4 Gerando Excel...")
+    print("4/5 Resumindo com IA (Claude Haiku)...")
+    if IA_ATIVA:
+        n_res = preencher_resumos(finais)
+        print(f"    {n_res} resumos gerados")
+    else:
+        print("    (pulado: ANTHROPIC_API_KEY nao configurada)")
+
+    print("5/5 Gerando Excel...")
     arq, n_not, n_ativos = gerar_excel(finais, empresas, args.saida)
     print(f"    Pronto: {arq}")
 

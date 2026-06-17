@@ -2,3 +2,4 @@ trafilatura
 openpyxl
 pandas
 requests
+anthropic

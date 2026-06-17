@@ -32,6 +32,10 @@ robusto e, idealmente, automatizado (rodar sozinho toda manhã).
 - Dedup por link E por título normalizado.
 - Fallback: se o corpo não baixar, valida pelo título + resumo do RSS.
 - Geração de Excel com 3 abas: NOTÍCIAS, RESUMO POR ATIVO, SEM COBERTURA.
+- **Resumo por IA (Claude Haiku):** `resumo_ia.py` preenche as colunas RESUMO IA e
+  IMPACTO de cada notícia via `claude-haiku-4-5`. É **opcional** — só roda se a
+  variável `ANTHROPIC_API_KEY` existir; sem ela, as colunas ficam vazias e o resto
+  roda normal. Falha por notícia é silenciosa (não derruba o run).
 
 ### O que FALTA / PRÓXIMOS PASSOS (pendências reais)
 1. **Calibração ao vivo:** a lógica foi testada em casos sintéticos, mas a coleta
@@ -41,14 +45,12 @@ robusto e, idealmente, automatizado (rodar sozinho toda manhã).
 2. **Bloqueio de fontes:** muitos portais (WSJ, FT, Bloomberg) têm paywall e
    retornam corpo vazio → caem no fallback de resumo. Avaliar se o resumo é
    suficiente ou se vale integrar uma fonte paga.
-3. **Camada de IA (opcional):** a decisão de relevância por regex tem limite. Uma
-   etapa de LLM (Claude via API) julgando "esta notícia é sobre a empresa como
-   ativo?" resolveria os casos ambíguos que o regex erra. O dono ainda não tem
-   chave de API da Anthropic.
-4. **Automação:** fazer rodar sozinho toda manhã (cron, GitHub Actions, ou
-   Colab agendado) e entregar o resultado (e-mail/WhatsApp/Drive).
-5. **Resumo por IA:** as colunas RESUMO IA e IMPACTO no Excel estão vazias,
-   prontas para serem preenchidas por uma etapa de sumarização.
+3. **IA na decisão de relevância (futuro):** hoje a IA só resume/avalia impacto
+   (depois do filtro por regex). Uma etapa de LLM julgando "esta notícia é sobre a
+   empresa como ativo?" poderia refinar os casos ambíguos que o regex ainda erra.
+4. **Automação:** ✅ feito — GitHub Actions roda seg-sex às 17h e envia por e-mail.
+5. **Resumo por IA:** ✅ feito — `resumo_ia.py` preenche RESUMO IA e IMPACTO com o
+   Claude Haiku (precisa do segredo `ANTHROPIC_API_KEY`; ver seção de automação).
 
 ### Decisões de design importantes (não reverter sem pensar)
 - O dono pediu explicitamente: **zero falso positivo** (nada de notícia que não é
@@ -79,6 +81,12 @@ O arquivo `.github/workflows/monitor.yml` faz o monitor rodar sozinho de
 **segunda a sexta às 17:00 de Brasília** (20:00 UTC), olhando as notícias das
 **últimas 24 horas**. Ao terminar, ele **envia o Excel por e-mail** e também
 deixa uma cópia anexada à execução (backup).
+
+### Resumo por IA (Claude Haiku) — opcional
+Para preencher as colunas **RESUMO IA** e **IMPACTO**, cadastre o segredo
+`ANTHROPIC_API_KEY` (chave da API da Anthropic) em **Settings → Secrets and
+variables → Actions → New repository secret**. Sem ele, o robô pula a etapa de IA
+(colunas vazias) e o resto roda normal. Usa o modelo `claude-haiku-4-5` (barato).
 
 ### Receber por e-mail (configurar uma vez só)
 O envio usa o Gmail. Você precisa cadastrar dois "segredos" no repositório:

@@ -291,7 +291,8 @@ def validar_todos(candidatos, corpos, empresas):
                 melhor = {"nome": nome, "ticker": cfg["ticker"], "score": score}
         if melhor:
             validadas[link] = {**c, "link": real, **melhor,
-                               "relevancia": melhor["score"], "resumo_ia": "", "impacto": ""}
+                               "relevancia": melhor["score"], "resumo_ia": "", "impacto": "",
+                               "corpo": (corpo or "")[:3000]}
 
     por_ativo = defaultdict(list)
     for n in validadas.values():
