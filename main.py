@@ -14,6 +14,7 @@ from empresas import EMPRESAS, carregar_tickers
 from coleta import coletar_candidatos, baixar_corpos, validar_todos
 from excel import gerar_excel
 from resumo_ia import preencher_resumos, ATIVADO as IA_ATIVA
+from fato_relevante import buscar_fatos_relevantes
 
 
 def main():
@@ -39,6 +40,11 @@ def main():
     cont = Counter(n["nome"] for n in finais)
     print(f"    {len(finais)} noticias validadas | {len(cont)}/{len(empresas)} ativos cobertos")
     print(f"    ({sem_corpo} sem corpo | {fora_janela} cortadas por data > 24h)")
+
+    print("3.5/5 Buscando fatos relevantes na CVM (oficial)...")
+    fatos = buscar_fatos_relevantes()
+    print(f"    {len(fatos)} fatos relevantes/comunicados nas ultimas 24h")
+    finais = fatos + finais   # fatos relevantes (oficiais) entram no topo
 
     print("4/5 Resumindo com IA (Google Gemini)...")
     if IA_ATIVA:
