@@ -15,9 +15,14 @@ robusto e, idealmente, automatizado (rodar sozinho toda manhã).
 - Coleta por empresa via **GDELT DOC API** (gratuita, sem chave, busca dedicada
   por nome, últimas 24h). Trocada do Google News RSS porque o GDELT não bloqueia
   servidores de nuvem, permitindo rodar de graça no GitHub Actions.
-- Validador de relevância em dois caminhos:
-  - **A) protagonista:** empresa no título, primeira metade, idealmente com verbo de ação.
-  - **B) corpo forte:** empresa não está no título mas aparece com força no corpo + contexto.
+- Validador de relevância focado em notícia **sobre a empresa** (não citação de passagem):
+  - **Exige a empresa no TÍTULO** (nome forte; ou nome fraco + termo de contexto).
+  - **Rejeita manchetes macro/mercado** (lista `MACRO_TITULO`: "Stocks Soar", "Dow/S&P/
+    Nasdaq", "biggest analyst calls", "Fed rate", etc.).
+  - **Rejeita roundups** (título citando 3+ empresas diferentes da carteira).
+  - Pontua por posição da empresa no título + verbo de ação + contexto + fonte premium.
+- Janela de 24h reforçada pela **data de publicação real** (extraída por trafilatura/
+  htmldate), além do filtro de data do GDELT — corta matérias antigas re-indexadas.
 - Estrutura de nomes em 3 níveis por empresa: `forte` (inequívoco), `fraco`
   (ambíguo, exige contexto) e `contexto` (termos de setor/produto/executivo).
 - Filtro de fontes por **allowlist Tier 1 / Tier 1.5** (em `coleta.py`): só passa

@@ -32,12 +32,12 @@ def main():
 
     print("3/4 Baixando corpos em paralelo e validando relevancia...")
     corpos = baixar_corpos(candidatos)
-    finais, sem_corpo = validar_todos(candidatos, corpos, empresas)
+    finais, sem_corpo, fora_janela = validar_todos(candidatos, corpos, empresas)
 
     from collections import Counter
     cont = Counter(n["nome"] for n in finais)
     print(f"    {len(finais)} noticias validadas | {len(cont)}/{len(empresas)} ativos cobertos")
-    print(f"    ({sem_corpo} usaram resumo do RSS como fallback)")
+    print(f"    ({sem_corpo} sem corpo | {fora_janela} cortadas por data > 24h)")
 
     print("4/4 Gerando Excel...")
     arq, n_not, n_ativos = gerar_excel(finais, empresas, args.saida)

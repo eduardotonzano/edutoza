@@ -1,6 +1,6 @@
 """Coleta de noticias (GDELT DOC API), download paralelo e validacao de relevancia."""
 
-import re, time, unicodedata, base64, requests, trafilatura
+import re, time, json, unicodedata, base64, requests, trafilatura
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict, Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -67,6 +67,17 @@ VERBOS = ["reported","reports","posted","announced","announces","said","says","u
     "forecast","hiked","slashed","agreed","signed","filed","anunciou","reportou","registrou",
     "divulgou","disse","lancou","comprou","adquiriu","vendeu","nomeou","demitiu","processou",
     "elevou","cortou","reduziu","aprovou","assinou","planeja","superou","decepcionou"]
+# Manchetes de mercado/macro: se o titulo bate com um destes termos, a noticia e
+# sobre o cenario (bolsa/juros/indices), nao sobre a empresa -> rejeitada.
+MACRO_TITULO = ["stock market today","market today","dow ","s&p 500","s & p 500","nasdaq",
+    "ftse","stoxx","nikkei 225","ibovespa","ibov","stocks soar","stocks rally","stocks slip",
+    "stocks fall","stocks rise","stocks jump","stocks climb","stocks drop","stocks slide",
+    "stocks mixed","stocks higher","stocks lower","wall street","premarket","pre-market",
+    "market wrap","markets wrap","futures","biggest analyst calls","analyst calls",
+    "stocks to watch","stocks to buy","top stocks","best stocks","movers","market movers",
+    "mercado hoje","bolsas","fechamento","ibc-br","payrolls","fed rate","rate decision",
+    "rate cut","rate hike","cpi ","inflation data","jobs report","gdp ","economy for stock",
+    "great economy","tariff","tariffs","live :","ao vivo","minuto a minuto"]
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
 
@@ -96,40 +107,63 @@ def link_real(url):
         return url
 
 def baixar(url):
-    """Baixa e extrai o texto do artigo. Timeout real no request. Retorna '' em falha."""
+    """Baixa o artigo e extrai (texto, data_publicacao). data_pub e date ou None.
+    Timeout real no request. Retorna ('', None) em falha."""
     try:
         r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
         if r.status_code != 200 or not r.text:
-            return ""
-        texto = trafilatura.extract(r.text)
-        return texto if texto else ""
-    except:
-        return ""
+            return "", None
+        dados = trafilatura.extract(r.text, output_format="json", with_metadata=True)
+        if not dados:
+            return "", None
+        obj = json.loads(dados)
+        texto = obj.get("text") or ""
+        data_pub = None
+        ds = obj.get("date")                      # formato 'YYYY-MM-DD'
+        if ds:
+            try: data_pub = datetime.strptime(ds[:10], "%Y-%m-%d").date()
+            except Exception: data_pub = None
+        return texto, data_pub
+    except Exception:
+        return "", None
 
-def validar(titulo, corpo, resumo, cfg, premium=False):
-    """Dois caminhos: A) protagonista no titulo; B) presenca forte no corpo.
-    Fallback: usa titulo+resumo quando o corpo nao baixou. Retorna score 0-10."""
+def _eh_macro(titulo):
+    """True se o titulo for de mercado/macro (bolsa, juros, indices, roundup)."""
+    return any(m in norm(titulo) for m in MACRO_TITULO)
+
+def _n_empresas_no_titulo(titulo, empresas):
+    """Quantas empresas DIFERENTES da carteira aparecem no titulo (detecta roundup)."""
+    if not empresas: return 1
+    return sum(1 for c in empresas.values() if conta(titulo, c["forte"] + c["fraco"]) > 0)
+
+def validar(titulo, corpo, resumo, cfg, premium=False, empresas=None):
+    """Noticia tem de ser SOBRE a empresa: o nome precisa estar no TITULO (nao so
+    citado no corpo). Rejeita manchetes macro/mercado e roundups. Retorna score 0-10."""
     nomes = cfg["forte"] + cfg["fraco"]
+    tl = norm(titulo)
+    # 1) A empresa PRECISA estar no titulo (senao e citacao de passagem no corpo).
+    if conta(titulo, nomes) == 0:
+        return 0
+    # 2) So nome ambiguo (fraco) no titulo -> exige termo de contexto (titulo+corpo).
     corpo_ok = bool(corpo and len(corpo) >= 200)
-    texto = corpo if corpo_ok else (titulo + " " + resumo)
-    tl = norm(titulo); full = titulo + " " + texto
-    tem_forte = conta(full, cfg["forte"]) > 0
-    if not tem_forte and cfg["fraco"] and conta(full, cfg["contexto"]) == 0:
+    full = titulo + " " + (corpo if corpo_ok else resumo)
+    if conta(titulo, cfg["forte"]) == 0 and conta(full, cfg["contexto"]) == 0:
         return 0
+    # 3) Rejeita manchete de mercado/macro (nao e noticia interna da empresa).
+    if _eh_macro(titulo):
+        return 0
+    # 4) Rejeita roundup: titulo citando 3+ empresas diferentes da carteira.
+    if _n_empresas_no_titulo(titulo, empresas) >= 3:
+        return 0
+    # 5) Pontuacao: empresa cedo no titulo + verbo de acao + contexto + premium.
     nome_total = conta(full, nomes)
-    if nome_total == 0:
-        return 0
     ctx = conta(full, cfg["contexto"])
     bp = 1 if premium else 0
-    if conta(titulo, nomes) > 0:
-        pos = min([tl.find(norm(n)) for n in nomes if norm(n) in tl] + [9999])
-        if pos <= len(tl) * 0.6:
-            tem_verbo = any(re.search(r'(?<![a-z])'+re.escape(norm(v))+r'(?![a-z])', tl) for v in VERBOS)
-            return min(10, 6 + nome_total + (1 if tem_verbo else 0) + min(ctx,3) + bp)
-    limiar = 3 if corpo_ok else 1
-    if nome_total >= limiar:
-        return min(10, 3 + nome_total + min(ctx,2) + bp)
-    return 0
+    pos = min([tl.find(norm(n)) for n in nomes if norm(n) in tl] + [9999])
+    cedo = pos <= len(tl) * 0.6
+    tem_verbo = any(re.search(r'(?<![a-z])'+re.escape(norm(v))+r'(?![a-z])', tl) for v in VERBOS)
+    score = 5 + (2 if cedo else 0) + (1 if tem_verbo else 0) + min(nome_total, 2) + min(ctx, 2) + bp
+    return min(10, score)
 
 def fonte_ok(fonte):
     """So aceita fontes Tier 1 / Tier 1.5 (allowlist). Sem fonte identificada -> rejeita."""
@@ -206,18 +240,19 @@ def coletar_candidatos(empresas):
 
 
 def baixar_corpos(candidatos):
-    """Baixa todos os corpos em paralelo. Retorna {link: (link_real, corpo)}."""
+    """Baixa os corpos em paralelo. Retorna {link: (link_real, corpo, data_pub)}."""
     def tarefa(link):
         real = link_real(link)
-        return link, real, baixar(real)
+        corpo, data_pub = baixar(real)
+        return link, real, corpo, data_pub
     resultados = {}
     t0 = time.time()
     with ThreadPoolExecutor(max_workers=WORKERS) as ex:
         futuros = [ex.submit(tarefa, l) for l in candidatos]
         done = 0
         for fut in as_completed(futuros):
-            link, real, corpo = fut.result()
-            resultados[link] = (real, corpo)
+            link, real, corpo, data_pub = fut.result()
+            resultados[link] = (real, corpo, data_pub)
             done += 1
             if done % 50 == 0:
                 print(f"  {done}/{len(candidatos)} baixados ({time.time()-t0:.0f}s)")
@@ -226,16 +261,24 @@ def baixar_corpos(candidatos):
 
 
 def validar_todos(candidatos, corpos, empresas):
-    """Valida cada candidato e escolhe a empresa de maior score. Top N por ativo."""
+    """Valida cada candidato e escolhe a empresa de maior score. Top N por ativo.
+    Reforca a janela de 24h pela DATA DE PUBLICACAO real (quando disponivel)."""
     validadas = {}
     sem_corpo = 0
+    fora_janela = 0
+    limite_dia = (datetime.now(timezone.utc) - timedelta(hours=JANELA_HORAS)).date()
     for link, c in candidatos.items():
-        real, corpo = corpos.get(link, (link, ""))
+        real, corpo, data_pub = corpos.get(link, (link, "", None))
+        # Corte por data de publicacao: se a materia for mais velha que a janela, descarta.
+        if data_pub is not None and data_pub < limite_dia:
+            fora_janela += 1
+            continue
         if not corpo or len(corpo) < 200:
             sem_corpo += 1
         melhor = None
         for nome, cfg in empresas.items():
-            score = validar(c["titulo"], corpo, c["resumo"], cfg, premium=c["premium"])
+            score = validar(c["titulo"], corpo, c["resumo"], cfg,
+                            premium=c["premium"], empresas=empresas)
             if score > 0 and (melhor is None or score > melhor["score"]):
                 melhor = {"nome": nome, "ticker": cfg["ticker"], "score": score}
         if melhor:
@@ -250,4 +293,4 @@ def validar_todos(candidatos, corpos, empresas):
         lst.sort(key=lambda x: (-x["score"], -x["data_obj"].timestamp()))
         finais.extend(lst[:MAX_POR_ATIVO])
     finais.sort(key=lambda x: (x["ticker"], -x["data_obj"].timestamp()))
-    return finais, sem_corpo
+    return finais, sem_corpo, fora_janela
