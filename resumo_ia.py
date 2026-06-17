@@ -6,13 +6,15 @@ um no-op (colunas RESUMO IA / IMPACTO ficam vazias) e o pipeline continua. Falha
 noticia e silenciosa (nao derruba o run). Pegue a chave em https://aistudio.google.com.
 """
 
-import os, json, time, requests
+import os, json, requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-MODELO  = "gemini-1.5-flash"   # gratuito e amplamente liberado no free tier (15 req/min)
+# Tenta os modelos nesta ordem; usa o primeiro que responder (404/429 -> proximo).
+# Todos sao gratuitos no free tier do Google AI Studio. Edite a ordem se quiser.
+MODELOS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-flash-latest",
+           "gemini-2.0-flash-lite", "gemini-2.0-flash"]
 WORKERS = 3                    # resumos simultaneos
 TIMEOUT = 30
-TENTATIVAS = 3                 # re-tenta em caso de 429 (limite por minuto)
 ATIVADO = bool(os.environ.get("GEMINI_API_KEY"))
 _URL = "https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent"
 
@@ -48,25 +50,22 @@ def _resumir_um(chave, nome, titulo, corpo):
             "temperature": 0.2,
         },
     }
-    for tentativa in range(TENTATIVAS):
+    for modelo in MODELOS:                         # tenta cada modelo; 404/429 -> proximo
         try:
-            r = requests.post(_URL.format(m=MODELO), params={"key": chave},
+            r = requests.post(_URL.format(m=modelo), params={"key": chave},
                               json=body, timeout=TIMEOUT)
-            if r.status_code == 429:               # limite por minuto -> espera e re-tenta
-                if tentativa < TENTATIVAS - 1:
-                    time.sleep(12 * (tentativa + 1))
-                    continue
-                print(f"  IA 429 (quota) em '{titulo[:35]}': {r.text[:200]}")
-                return "", ""
+            if r.status_code in (404, 429):
+                continue
             if r.status_code != 200:
-                print(f"  IA HTTP {r.status_code} em '{titulo[:35]}': {r.text[:200]}")
-                return "", ""
+                print(f"  IA HTTP {r.status_code} ({modelo}): {r.text[:150]}")
+                continue
             cand = r.json()["candidates"][0]["content"]["parts"][0]["text"]
             d = json.loads(cand)
             return (d.get("resumo", "") or "").strip(), (d.get("impacto", "") or "").strip()
         except Exception as e:
-            print(f"  IA falhou em '{titulo[:35]}': {str(e)[:80]}")
-            return "", ""
+            print(f"  IA erro ({modelo}) em '{titulo[:30]}': {str(e)[:70]}")
+            continue
+    print(f"  IA: nenhum modelo respondeu para '{titulo[:35]}'")
     return "", ""
 
 

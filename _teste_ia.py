@@ -3,9 +3,9 @@ resultado. So serve para confirmar que GEMINI_API_KEY + o modelo funcionam.
 Rodar: python _teste_ia.py
 """
 import os, requests
-from resumo_ia import preencher_resumos, ATIVADO, MODELO
+from resumo_ia import preencher_resumos, ATIVADO, MODELOS
 
-print(f"IA ativada: {ATIVADO} | modelo: {MODELO}")
+print(f"IA ativada: {ATIVADO} | modelos: {MODELOS}")
 
 # Lista os modelos que ESTA chave aceita para generateContent (diagnostico).
 chave = os.environ.get("GEMINI_API_KEY", "")
