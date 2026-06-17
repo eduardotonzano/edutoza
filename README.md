@@ -64,3 +64,31 @@ pip install -r requirements.txt
 python main.py --carteira Planilha_para_API.xlsx
 ```
 A planilha precisa ter uma aba `CARTEIRA` com colunas `TICKER` e `NOME`.
+
+## Automação (GitHub Actions) — roda sozinho toda manhã
+
+O arquivo `.github/workflows/monitor.yml` faz o monitor rodar sozinho de
+**segunda a sexta às 08:00 de Brasília** (11:00 UTC) e também pode ser
+disparado a qualquer momento por um botão. O resultado (Excel) fica anexado
+à execução para download.
+
+### Como pegar o relatório (passo a passo)
+1. Abra o repositório no GitHub e clique na aba **Actions** (no topo).
+2. No menu da esquerda, clique em **Monitor de Notícias da Carteira**.
+3. Clique na execução mais recente (a primeira da lista, com ✓ verde).
+4. Role até o final, na seção **Artifacts**, e clique em **relatorio-noticias**
+   para baixar o Excel.
+
+### Rodar na hora (sem esperar a manhã)
+Na aba **Actions** → **Monitor de Notícias da Carteira** → botão
+**Run workflow** (canto direito) → **Run workflow**. Em ~1 minuto o relatório
+aparece em **Artifacts**.
+
+### Mudar o horário
+No `monitor.yml`, na linha `cron: "0 11 * * 1-5"`, o `11` é a hora **em UTC**.
+Brasília = UTC−3, então `11` = 08:00 daqui. Ex.: para 07:00 de Brasília, use `10`.
+
+> ⚠️ **Atenção (rede):** o Google News às vezes bloqueia (HTTP 403) requisições
+> vindas de servidores de nuvem (é o caso do GitHub Actions e do Colab em IP de
+> datacenter). Se uma execução vier vazia (tudo em "SEM COBERTURA"), foi bloqueio
+> de rede, não erro do código — rodar na sua máquina/internet normal resolve.
