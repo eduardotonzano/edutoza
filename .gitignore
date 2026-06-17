@@ -1,0 +1,9 @@
+# Ambiente virtual
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Relatorios gerados
+Noticias_Carteira_*.xlsx
+smoke_test.xlsx
