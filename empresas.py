@@ -8,8 +8,9 @@ Estrutura de cada empresa:
 """
 
 EMPRESAS = {
- "Suzano": {"forte":["suzano"],"fraco":[],
-            "contexto":["pulp","paper","celulose","eucalyptus","cellulose","beto abreu"]},
+ "Suzano": {"forte":[],"fraco":["suzano"],
+            "contexto":["pulp","paper","celulose","papel","eucalyptus","cellulose","beto abreu",
+                        "fibria","kraft","hardwood","bleached","tissue"]},
  "Amazon": {"forte":["amazon.com","amazon web services","aws"],"fraco":["amazon"],
             "contexto":["e-commerce","bezos","jassy","prime","cloud","retailer","seattle","kuiper"]},
  "Cisco": {"forte":["cisco systems"],"fraco":["cisco"],

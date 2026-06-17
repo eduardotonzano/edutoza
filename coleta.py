@@ -78,6 +78,13 @@ MACRO_TITULO = ["stock market today","market today","dow ","s&p 500","s & p 500"
     "mercado hoje","bolsas","fechamento","ibc-br","payrolls","fed rate","rate decision",
     "rate cut","rate hike","cpi ","inflation data","jobs report","gdp ","economy for stock",
     "great economy","tariff","tariffs","live :","ao vivo","minuto a minuto"]
+# Manchetes de "filler"/clickbait/promocional: nao sao noticia real da empresa.
+FILLER_TITULO = ["invested in","worth this much","years ago would","5 years ago","10 years ago",
+    "should you buy","is it time to buy","is a buy","a better buy","stock a buy","time to buy",
+    "could more than double","here is why","heres why","this stock","best stock","top stock",
+    "stocks to buy","motley fool","zacks rank","price target","shares sold","shares bought",
+    "shares acquired","stake in","position in","hold rating","buy rating","sell rating",
+    "shocking","you should know","reasons to","things to know","what to know","vs ."]
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
 
@@ -128,8 +135,9 @@ def baixar(url):
         return "", None
 
 def _eh_macro(titulo):
-    """True se o titulo for de mercado/macro (bolsa, juros, indices, roundup)."""
-    return any(m in norm(titulo) for m in MACRO_TITULO)
+    """True se o titulo for de mercado/macro (bolsa, juros, indices) ou filler/clickbait."""
+    t = norm(titulo)
+    return any(m in t for m in MACRO_TITULO) or any(f in t for f in FILLER_TITULO)
 
 def _n_empresas_no_titulo(titulo, empresas):
     """Quantas empresas DIFERENTES da carteira aparecem no titulo (detecta roundup)."""
