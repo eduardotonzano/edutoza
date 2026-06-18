@@ -43,6 +43,9 @@ jobs:
           # A SEC exige e-mail de contato no User-Agent (senao da 403). Usa o mesmo
           # e-mail do envio (segredo MAIL_USERNAME); nao fica escrito no codigo.
           SEC_CONTACT: ${{ secrets.MAIL_USERNAME }}
+          # API de noticias (NewsData.io) - OPCIONAL e gratuita. Sem o segredo, e pulada.
+          # Pegue a chave em https://newsdata.io e cadastre como segredo NEWS_API_KEY.
+          NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
         run: python -u main.py --carteira carteira_completa.csv --saida relatorio.xlsx
 
       - name: Descobrir a data de hoje (Brasília)

@@ -77,11 +77,11 @@ MACRO_TITULO = ["stock market today","market today","dow ","s&p 500","s & p 500"
     "ftse","stoxx","nikkei 225","ibovespa","ibov","stocks soar","stocks rally","stocks slip",
     "stocks fall","stocks rise","stocks jump","stocks climb","stocks drop","stocks slide",
     "stocks mixed","stocks higher","stocks lower","wall street","premarket","pre-market",
-    "market wrap","markets wrap","futures","biggest analyst calls","analyst calls",
-    "stocks to watch","stocks to buy","top stocks","best stocks","movers","market movers",
+    "market wrap","markets wrap","biggest analyst calls","analyst calls",
+    "stocks to watch","stocks to buy","top stocks","best stocks","market movers",
     "mercado hoje","bolsas","fechamento","ibc-br","payrolls","fed rate","rate decision",
     "rate cut","rate hike","cpi ","inflation data","jobs report","gdp ","economy for stock",
-    "great economy","tariff","tariffs","live :","ao vivo","minuto a minuto",
+    "great economy","live :","ao vivo","minuto a minuto",
     # macro/mercado em portugues
     "ibovespa","ibov","selic","copom","pregao","pregão","dolar","dólar","cambio","câmbio",
     "carteira recomendada","acoes para comprar","ações para comprar","melhores acoes",
@@ -93,7 +93,7 @@ FILLER_TITULO = ["invested in","worth this much","years ago would","5 years ago"
     "could more than double","here is why","heres why","this stock","best stock","top stock",
     "stocks to buy","motley fool","zacks rank","price target","shares sold","shares bought",
     "shares acquired","stake in","position in","hold rating","buy rating","sell rating",
-    "shocking","you should know","reasons to","things to know","what to know","vs ."]
+    "shocking","you should know","reasons to","things to know","what to know"]
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
 
@@ -236,15 +236,26 @@ def buscar_gdelt(termo, maxrecords=GDELT_MAX):
 
 
 def _montar_lotes(empresas, tamanho):
-    """Agrupa as empresas em lotes e monta uma query OR por lote, ex:
-    '(Petrobras) OR (Vale mineracao) OR (WEG equipamentos)'. Cada termo entre
-    parenteses casa por E (palavras juntas); o OR une as empresas do lote."""
+    """Agrupa as empresas em lotes e monta uma query OR por lote. Cada empresa vira um
+    grupo de FRASES EXATAS (entre aspas) unidas por OR, ex.: ("banco do brasil" OR "bb").
+    Frase entre aspas = busca o nome exato (recall alto + precisao); NAO usa o campo
+    'busca' antigo (que era E de palavras soltas e derrubava quase tudo). O setor fica
+    so na validacao (validar)."""
     termos = []
     for nome, cfg in empresas.items():
-        b = cfg.get("busca") or (cfg["forte"][0] if cfg["forte"] else nome)
-        termos.append(f"({b})")
+        nomes = cfg.get("forte") or [nome]
+        partes = " OR ".join(f'"{n}"' for n in nomes[:3])   # ate 3 variantes do nome
+        termos.append(f"({partes})")
     lotes = [termos[i:i + tamanho] for i in range(0, len(termos), tamanho)]
     return [" OR ".join(l) for l in lotes]
+
+
+def montar_candidato(titulo, link, fonte, data_obj, resumo=""):
+    """Cria um candidato no formato que baixar_corpos/validar_todos esperam.
+    Usado pelas fontes de imprensa (GDELT, RSS, API) para alimentar o mesmo pool."""
+    return {"titulo": titulo, "link": link, "resumo": resumo, "fonte": fonte,
+            "premium": eh_premium(fonte),
+            "data": data_obj.strftime("%d/%m/%Y %H:%M"), "data_obj": data_obj}
 
 
 def coletar_candidatos(empresas):
