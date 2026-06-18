@@ -6,14 +6,15 @@ um no-op (colunas RESUMO IA / IMPACTO ficam vazias) e o pipeline continua. Falha
 noticia e silenciosa (nao derruba o run). Pegue a chave em https://aistudio.google.com.
 """
 
-import os, json, requests
+import os, json, time, requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Tenta os modelos nesta ordem; usa o primeiro que responder (404/429 -> proximo).
-# Todos sao gratuitos no free tier do Google AI Studio. Edite a ordem se quiser.
-MODELOS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-flash-latest",
-           "gemini-2.0-flash-lite", "gemini-2.0-flash"]
-WORKERS = 3                    # resumos simultaneos
+# Tenta os modelos nesta ordem; comeca pelos "lite" (cota/RPM maior no free tier) p/
+# aguentar o volume de noticias sem estourar o limite de velocidade. 404/429 -> proximo.
+MODELOS = ["gemini-2.5-flash-lite", "gemini-2.0-flash-lite", "gemini-2.5-flash",
+           "gemini-flash-latest", "gemini-2.0-flash"]
+WORKERS = 2                    # resumos simultaneos (poucos: respeita o RPM do free tier)
+RODADAS = 4                    # rodadas de re-tentativa (p/ chegar a 100% sob rate limit)
 TIMEOUT = 30
 ATIVADO = bool(os.environ.get("GEMINI_API_KEY"))
 _URL = "https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent"
@@ -53,21 +54,22 @@ def _resumir_um(chave, nome, titulo, corpo):
             "temperature": 0.2,
         },
     }
-    for modelo in MODELOS:                         # tenta cada modelo; 404/429 -> proximo
-        try:
-            r = requests.post(_URL.format(m=modelo), params={"key": chave},
-                              json=body, timeout=TIMEOUT)
-            if r.status_code in (404, 429):
+    # Varias rodadas pela lista de modelos, com espera entre elas: sob rate limit (429)
+    # ou erro de conexao, re-tenta ate conseguir, em vez de desistir na primeira.
+    for rodada in range(RODADAS):
+        for modelo in MODELOS:
+            try:
+                r = requests.post(_URL.format(m=modelo), params={"key": chave},
+                                  json=body, timeout=TIMEOUT)
+                if r.status_code == 200:
+                    cand = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+                    d = json.loads(cand)
+                    return ((d.get("resumo", "") or "").strip(),
+                            (d.get("impacto", "") or "").strip())
+                # 404 = modelo indisponivel; 429/503 = limite/sobrecarga -> proximo modelo
+            except Exception:
                 continue
-            if r.status_code != 200:
-                print(f"  IA HTTP {r.status_code} ({modelo}): {r.text[:150]}")
-                continue
-            cand = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-            d = json.loads(cand)
-            return (d.get("resumo", "") or "").strip(), (d.get("impacto", "") or "").strip()
-        except Exception as e:
-            print(f"  IA erro ({modelo}) em '{titulo[:30]}': {str(e)[:70]}")
-            continue
+        time.sleep(2 * (rodada + 1))               # backoff antes da proxima rodada
     print(f"  IA: nenhum modelo respondeu para '{titulo[:35]}'")
     return "", ""
 

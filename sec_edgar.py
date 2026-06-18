@@ -9,6 +9,7 @@ carteira e devolvemos no MESMO formato dos outros (fato_relevante.py), para entr
 
 import os, requests, time
 from datetime import datetime, timezone, timedelta
+from coleta import fmt_brt
 
 JANELA_HORAS = 24
 TIMEOUT = 20
@@ -95,7 +96,7 @@ def buscar_fatos_sec(emissores_us):
             corpo = (f"Filing {form} de {emissor['nome']} em {ds}. "
                      f"Itens: {itens_cod or '-'}. {desc}").strip()
             itens.append({
-                "data": dt.strftime("%d/%m/%Y"), "data_obj": dt,
+                "data": fmt_brt(dt), "data_obj": dt,
                 "ticker": emissor.get("ticker") or emissor.get("sec_ticker") or "SEC",
                 "nome": emissor["nome"],
                 "titulo": f"[SEC {form}] {emissor['nome']} - itens {itens_cod or 's/ codigo'}"[:200],

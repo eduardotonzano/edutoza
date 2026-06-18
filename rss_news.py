@@ -189,7 +189,8 @@ def _raspar_yahoo(emissor):
         itens = _parse_feed(r.content)
     except Exception:
         return []
-    return [(t, l, d) for (t, l, d) in itens if d >= limite and not _eh_macro(t)]
+    recentes = [(t, l, d) for (t, l, d) in itens if d >= limite and not _eh_macro(t)]
+    return recentes[:MAX_POR_TICKER]   # limita p/ o Yahoo nao dominar o relatorio
 
 
 def coletar_yahoo(emissores):

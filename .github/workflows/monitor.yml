@@ -57,7 +57,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: relatorio-noticias
-          path: relatorio.xlsx
+          path: |
+            relatorio.xlsx
+            Principais_Noticias_24h.pdf
           retention-days: 90
 
       # ETAPA FINAL: envia o Excel por e-mail. Precisa de 2 "segredos"
@@ -84,8 +86,7 @@ jobs:
           body: |
             Bom dia/boa tarde!
 
-            Segue em anexo o relatório com as notícias relevantes da carteira
-            nas últimas 24 horas (${{ steps.hoje.outputs.data }}).
-
-            Abra o arquivo "relatorio.xlsx" anexado.
-          attachments: relatorio.xlsx
+            Seguem em anexo, referentes às últimas 24 horas (${{ steps.hoje.outputs.data }}):
+            - "Principais_Noticias_24h.pdf": as notícias do dia com resumo de IA e impacto.
+            - "relatorio.xlsx": a planilha completa (todos os ativos, status e abas).
+          attachments: relatorio.xlsx,Principais_Noticias_24h.pdf

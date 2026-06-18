@@ -96,6 +96,17 @@ FILLER_TITULO = ["invested in","worth this much","years ago would","5 years ago"
     "shocking","you should know","reasons to","things to know","what to know"]
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
+# Horario de Brasilia (UTC-3 fixo; o Brasil nao tem horario de verao desde 2019). Todas as
+# datas internas sao tz-aware em UTC; a EXIBICAO (Excel/PDF/log) converte para BRT.
+BRT = timezone(timedelta(hours=-3))
+
+def fmt_brt(dt):
+    """Formata um datetime (tz-aware) no horario de Brasilia: 'dd/mm HH:MM'."""
+    try:
+        return dt.astimezone(BRT).strftime("%d/%m %H:%M")
+    except Exception:
+        return ""
+
 
 def norm(t):
     return unicodedata.normalize('NFKD', t).encode('ascii','ignore').decode('ascii').lower()
@@ -255,7 +266,7 @@ def montar_candidato(titulo, link, fonte, data_obj, resumo=""):
     Usado pelas fontes de imprensa (GDELT, RSS, API) para alimentar o mesmo pool."""
     return {"titulo": titulo, "link": link, "resumo": resumo, "fonte": fonte,
             "premium": eh_premium(fonte),
-            "data": data_obj.strftime("%d/%m/%Y %H:%M"), "data_obj": data_obj}
+            "data": fmt_brt(data_obj), "data_obj": data_obj}
 
 
 def coletar_candidatos(empresas):
@@ -306,11 +317,18 @@ def coletar_candidatos(empresas):
         fonte = (a.get("domain") or "").strip()
         if not fonte_ok(fonte): continue
         titulos_vistos.add(chave)
-        candidatos[link] = {"titulo": titulo, "link": link,
-            "resumo": "", "fonte": fonte,
-            "premium": eh_premium(fonte),
-            "data": data.strftime("%d/%m/%Y %H:%M"), "data_obj": data}
+        candidatos[link] = montar_candidato(titulo, link, fonte, data)
     return candidatos
+
+
+def precisa_corpo(titulo, empresas):
+    """True se o titulo cita um nome AMBIGUO (fraco) de alguma empresa SEM um nome forte
+    junto — esses precisam do corpo para confirmar o contexto. Quando ha nome forte no
+    titulo, a validacao passa sem corpo; assim baixamos o corpo so quando importa."""
+    for cfg in empresas.values():
+        if conta(titulo, cfg["forte"]) == 0 and conta(titulo, cfg.get("fraco", [])) > 0:
+            return True
+    return False
 
 
 def _baixar_tarefa(link):
@@ -352,15 +370,16 @@ def baixar_corpos(candidatos):
 
 def validar_todos(candidatos, corpos, empresas):
     """Valida cada candidato e escolhe a empresa de maior score. Top N por ativo.
-    Reforca a janela de 24h pela DATA DE PUBLICACAO real (quando disponivel)."""
+    Janela de 24h pelo TIMESTAMP exato de publicacao (data_obj, em UTC) - igual para
+    todas as fontes. O corpo (quando baixado) so serve para confirmar contexto/IA."""
     validadas = {}
     sem_corpo = 0
     fora_janela = 0
-    limite_dia = (datetime.now(timezone.utc) - timedelta(hours=JANELA_HORAS)).date()
+    limite = datetime.now(timezone.utc) - timedelta(hours=JANELA_HORAS)
     for link, c in candidatos.items():
         real, corpo, data_pub = corpos.get(link, (link, "", None))
-        # Corte por data de publicacao: se a materia for mais velha que a janela, descarta.
-        if data_pub is not None and data_pub < limite_dia:
+        # Corte exato pela janela de 24h, pelo horario de publicacao (data_obj).
+        if c.get("data_obj") is None or c["data_obj"] < limite:
             fora_janela += 1
             continue
         if not corpo or len(corpo) < 200:

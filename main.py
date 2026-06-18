@@ -14,13 +14,15 @@ from collections import Counter
 
 from emissores import EMISSORES
 from mapeamento import mapear_carteira
-from coleta import coletar_candidatos, baixar_corpos, validar_todos, norm
+from coleta import coletar_candidatos, baixar_corpos, validar_todos, norm, precisa_corpo
 from rss_news import coletar_feeds_tier1, coletar_yahoo
+from google_news import coletar_google
 from news_api import coletar_api
 from fato_relevante import buscar_fatos_relevantes
 from sec_edgar import buscar_fatos_sec
 from ri_scraping import raspar_ris
 from excel import gerar_excel
+from pdf_digest import gerar_pdf
 from resumo_ia import preencher_resumos, ATIVADO as IA_ATIVA
 
 
@@ -61,23 +63,29 @@ def main():
     us_em  = [c for c in EMISSORES.values() if c["news_applicable"] and (c.get("sec_cik") or c.get("sec_ticker"))]
     ri_em  = [c for c in EMISSORES.values() if c.get("ri_url")]
 
-    print("2/6 Coletando imprensa (GDELT + RSS Tier 1 + Yahoo + API)...")
+    print("2/6 Coletando imprensa (GDELT + Google News + RSS Tier 1 + Yahoo + API)...")
+    emissores_lista = list(gdelt_reg.values())
     candidatos = {}
     if os.environ.get("PULAR_GDELT"):
         print("    GDELT PULADO (PULAR_GDELT setado p/ teste)")
     else:
         candidatos.update(coletar_candidatos(gdelt_reg))      # imprensa global (GDELT)
-    candidatos.update(coletar_feeds_tier1(gdelt_reg))         # feeds RSS Tier 1 (confiavel)
-    candidatos.update(coletar_yahoo(list(gdelt_reg.values())))# Yahoo Finance por ticker
+    candidatos.update(coletar_google(emissores_lista))        # Google News por empresa
+    candidatos.update(coletar_feeds_tier1(gdelt_reg))         # feeds RSS Tier 1
+    candidatos.update(coletar_yahoo(emissores_lista))         # Yahoo Finance por ticker
     candidatos.update(coletar_api(gdelt_reg))                 # API NewsData (opcional)
     print(f"    {len(candidatos)} candidatos unicos no pool de imprensa")
 
-    print("3/6 Baixando corpos e validando relevancia...")
-    corpos = baixar_corpos(candidatos)
+    print("3/6 Baixando corpos (so quando preciso) e validando relevancia...")
+    # Baixa o corpo so dos itens com nome AMBIGUO no titulo (precisam de contexto); os
+    # demais validam pelo titulo. Evita centenas de downloads e acelera o run.
+    precisam = {l: c for l, c in candidatos.items() if precisa_corpo(c["titulo"], gdelt_reg)}
+    print(f"    {len(precisam)}/{len(candidatos)} precisam de corpo (nome ambiguo)")
+    corpos = baixar_corpos(precisam)
     imprensa_finais, sem_corpo, fora_janela = validar_todos(candidatos, corpos, gdelt_reg)
     cobertos = len(Counter(n["nome"] for n in imprensa_finais))
     print(f"    {len(imprensa_finais)} noticias validadas | "
-          f"{cobertos} emissores cobertos ({sem_corpo} sem corpo, {fora_janela} fora da janela)")
+          f"{cobertos} emissores cobertos ({fora_janela} fora da janela de 24h)")
 
     print(f"4/6 Fatos relevantes (CVM {len(cvm_em)} | SEC {len(us_em)} | RI {len(ri_em)})...")
     fatos_cvm = buscar_fatos_relevantes(cvm_em)
@@ -94,13 +102,18 @@ def main():
     print("5/6 Resumindo com IA (Google Gemini)...")
     if IA_ATIVA:
         n_res = preencher_resumos(finais)
-        print(f"    {n_res} resumos gerados")
+        print(f"    {n_res}/{len(finais)} itens com resumo de IA")
     else:
         print("    (pulado: GEMINI_API_KEY nao configurada)")
 
-    print("6/6 Gerando Excel...")
+    print("6/6 Gerando Excel e PDF...")
     arq, n_not, n_mon = gerar_excel(alvos, finais, args.saida)
-    print(f"    Pronto: {arq}")
+    print(f"    Excel: {arq}")
+    try:
+        pdf = gerar_pdf(finais, "Principais_Noticias_24h.pdf")
+        print(f"    PDF: {pdf}")
+    except Exception as e:
+        print(f"    PDF falhou (seguindo sem ele): {str(e)[:80]}")
 
     print("\n--- MATCHES (confira a qualidade) ---")
     for n in finais:

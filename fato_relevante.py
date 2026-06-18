@@ -10,6 +10,7 @@ Emissores estrangeiros (US Govt, Citi, Oracle, etc.) sao tratados na etapa da SE
 
 import csv, io, zipfile, unicodedata, requests
 from datetime import datetime, timezone, timedelta
+from coleta import fmt_brt
 
 JANELA_HORAS = 24
 # (connect, read): a CVM as vezes nao responde a partir de IPs de datacenter (GitHub).
@@ -169,7 +170,7 @@ def buscar_fatos_relevantes(emissores=None):
         vistos.add(chave)
         cat_label = "Fato Relevante" if "fato relevante" in categoria else "Comunicado ao Mercado"
         itens.append({
-            "data": dt.strftime("%d/%m/%Y %H:%M"), "data_obj": dt,
+            "data": fmt_brt(dt), "data_obj": dt,
             "ticker": ticker, "nome": disp,
             "titulo": f"[{cat_label}] {assunto}"[:200],
             "fonte": "CVM", "premium": True, "link": link,

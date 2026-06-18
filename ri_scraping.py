@@ -13,6 +13,7 @@ sao os autoritativos; a RI complementa. Falhas sao silenciosas e o tempo total e
 import re, time, requests, unicodedata
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from coleta import fmt_brt
 
 RI_TIMEOUT = 8
 RI_WORKERS = 6
@@ -91,7 +92,7 @@ def _raspar_um(emissor):
             continue
         vistos.add(chave)
         itens.append({
-            "data": agora.strftime("%d/%m/%Y"), "data_obj": agora,
+            "data": fmt_brt(agora), "data_obj": agora,
             "ticker": emissor.get("ticker", "-"), "nome": emissor["nome"],
             "titulo": f"[RI] {texto}"[:200],
             "fonte": f"RI/{emissor['nome']}"[:30], "premium": True,
