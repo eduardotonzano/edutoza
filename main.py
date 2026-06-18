@@ -61,22 +61,22 @@ def main():
     us_em  = [c for c in EMISSORES.values() if c["news_applicable"] and (c.get("sec_cik") or c.get("sec_ticker"))]
     ri_em  = [c for c in EMISSORES.values() if c.get("ri_url")]
 
-    print("2/6 Coletando imprensa (GDELT + RSS Tier 1 + API)...")
+    print("2/6 Coletando imprensa (GDELT + RSS Tier 1 + Yahoo + API)...")
     candidatos = {}
     if os.environ.get("PULAR_GDELT"):
         print("    GDELT PULADO (PULAR_GDELT setado p/ teste)")
     else:
         candidatos.update(coletar_candidatos(gdelt_reg))      # imprensa global (GDELT)
     candidatos.update(coletar_feeds_tier1(gdelt_reg))         # feeds RSS Tier 1 (confiavel)
+    candidatos.update(coletar_yahoo(list(gdelt_reg.values())))# Yahoo Finance por ticker
     candidatos.update(coletar_api(gdelt_reg))                 # API NewsData (opcional)
     print(f"    {len(candidatos)} candidatos unicos no pool de imprensa")
 
     print("3/6 Baixando corpos e validando relevancia...")
     corpos = baixar_corpos(candidatos)
     imprensa_finais, sem_corpo, fora_janela = validar_todos(candidatos, corpos, gdelt_reg)
-    yahoo_finais = coletar_yahoo(list(gdelt_reg.values()))    # Yahoo por ticker (pre-atribuido)
-    cobertos = len(Counter(n["nome"] for n in imprensa_finais + yahoo_finais))
-    print(f"    {len(imprensa_finais)} validadas + {len(yahoo_finais)} Yahoo | "
+    cobertos = len(Counter(n["nome"] for n in imprensa_finais))
+    print(f"    {len(imprensa_finais)} noticias validadas | "
           f"{cobertos} emissores cobertos ({sem_corpo} sem corpo, {fora_janela} fora da janela)")
 
     print(f"4/6 Fatos relevantes (CVM {len(cvm_em)} | SEC {len(us_em)} | RI {len(ri_em)})...")
@@ -87,7 +87,7 @@ def main():
     fatos_ri = raspar_ris(ri_em)
     print(f"    RI: {len(fatos_ri)} releases raspados")
 
-    finais = _dedup(fatos_sec + fatos_cvm + fatos_ri + imprensa_finais + yahoo_finais)
+    finais = _dedup(fatos_sec + fatos_cvm + fatos_ri + imprensa_finais)
     finais.sort(key=lambda x: (str(x["ticker"]), -x["data_obj"].timestamp()))
     print(f"    {len(finais)} itens apos juntar e deduplicar")
 

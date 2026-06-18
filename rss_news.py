@@ -173,6 +173,10 @@ def _simbolo_yahoo(emissor):
 
 
 def _raspar_yahoo(emissor):
+    """Retorna (titulo, link, data) das ultimas 24h do feed do ticker. O Yahoo mistura
+    materias 'relacionadas' (de outras empresas), por isso a atribuicao NAO e feita aqui:
+    os itens entram no pool e passam pelo validar_todos (exige o nome no titulo), o que
+    corta o ruido e ainda re-roteia o artigo para a empresa certa."""
     sym, reg, lang = _simbolo_yahoo(emissor)
     if not sym:
         return []
@@ -185,29 +189,17 @@ def _raspar_yahoo(emissor):
         itens = _parse_feed(r.content)
     except Exception:
         return []
-    out = []
-    for titulo, link, data in itens:
-        if data < limite or _eh_macro(titulo):
-            continue
-        out.append({
-            "data": data.strftime("%d/%m/%Y %H:%M"), "data_obj": data,
-            "ticker": emissor.get("ticker", "-"), "nome": emissor["nome"],
-            "titulo": titulo, "fonte": "finance.yahoo.com", "premium": False,
-            "link": link, "score": 6, "relevancia": 6, "resumo_ia": "", "impacto": "",
-            "corpo": "",
-        })
-        if len(out) >= MAX_POR_TICKER:
-            break
-    return out
+    return [(t, l, d) for (t, l, d) in itens if d >= limite and not _eh_macro(t)]
 
 
 def coletar_yahoo(emissores):
-    """RSS do Yahoo Finance por ticker, pre-atribuido ao emissor. Lista de itens finais."""
+    """RSS do Yahoo Finance por ticker. Retorna {link: candidato} para o pool de imprensa
+    (validacao por nome-no-titulo acontece depois, no validar_todos)."""
     alvos = [e for e in emissores if _simbolo_yahoo(e)[0]]
     if not alvos:
-        return []
+        return {}
     t0 = time.time()
-    finais, n_ok = [], 0
+    candidatos = {}
     with ThreadPoolExecutor(max_workers=YAHOO_WORKERS) as ex:
         futuros = {ex.submit(_raspar_yahoo, e): e for e in alvos}
         for fut in as_completed(futuros):
@@ -217,8 +209,8 @@ def coletar_yahoo(emissores):
                 itens = fut.result()
             except Exception:
                 itens = []
-            if itens:
-                n_ok += 1
-                finais.extend(itens)
-    print(f"  RSS Yahoo: {len(alvos)} tickers, {len(finais)} noticias ({n_ok} tickers com noticia)")
-    return finais
+            for titulo, link, data in itens:
+                if link not in candidatos:
+                    candidatos[link] = montar_candidato(titulo, link, "finance.yahoo.com", data)
+    print(f"  RSS Yahoo: {len(alvos)} tickers -> {len(candidatos)} candidatos (validar depois)")
+    return candidatos
