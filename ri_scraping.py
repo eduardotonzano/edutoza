@@ -56,17 +56,18 @@ def _abs_url(base, href):
 
 
 def _raspar_um(emissor):
-    """Baixa a RI de um emissor e devolve itens-padrao recentes. [] em qualquer falha."""
+    """Baixa a RI de um emissor. Retorna (alcancado, itens): alcancado=True se o site
+    respondeu 200. [] em qualquer falha (403/JS/erro de rede)."""
     url = emissor.get("ri_url")
     if not url:
-        return []
+        return False, []
     try:
         r = requests.get(url, headers=HEADERS, timeout=RI_TIMEOUT)
         if r.status_code != 200 or not r.text:
-            return []
+            return False, []
         html = r.text
     except Exception:
-        return []
+        return False, []
 
     datas = _datas_recentes()
     agora = datetime.now(timezone.utc)
@@ -100,23 +101,35 @@ def _raspar_um(emissor):
         })
         if len(itens) >= 3:        # no maximo 3 por emissor
             break
-    return itens
+    return True, itens
 
 
 def raspar_ris(emissores_com_ri):
-    """Raspa em paralelo as RIs dos emissores que tem ri_url. Limitado por RI_BUDGET."""
+    """Raspa em paralelo as RIs dos emissores que tem ri_url. Limitado por RI_BUDGET.
+    Imprime diagnostico: quantos sites foram tentados, alcancados (200) e renderam itens."""
     alvos = [e for e in emissores_com_ri if e.get("ri_url")]
     if not alvos:
         return []
     t0 = time.time()
     resultados = []
+    n_alcancados = 0
+    n_com_itens = 0
+    n_processados = 0
     with ThreadPoolExecutor(max_workers=RI_WORKERS) as ex:
         futuros = {ex.submit(_raspar_um, e): e for e in alvos}
         for fut in as_completed(futuros):
             if time.time() - t0 > RI_BUDGET:
                 break
+            n_processados += 1
             try:
-                resultados.extend(fut.result() or [])
+                alcancado, itens = fut.result()
+                if alcancado:
+                    n_alcancados += 1
+                if itens:
+                    n_com_itens += 1
+                    resultados.extend(itens)
             except Exception:
                 pass
+    print(f"  RI diag: {len(alvos)} sites, {n_processados} processados, "
+          f"{n_alcancados} alcancados (200), {n_com_itens} renderam itens")
     return resultados

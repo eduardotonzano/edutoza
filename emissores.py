@@ -161,15 +161,73 @@ def _campos_acao(nome):
     }
 
 
+# Paginas de RI (Relacoes com Investidores) de cada emissor, para a raspagem best-effort
+# (ri_scraping.py). TODAS as empresas da base recebem a sua, mesmo tratamento. Emissores
+# sem RI publica (financeiras pequenas, securitizadoras, agro de capital fechado, fintechs
+# privadas como PicPay/Neon, e governos) ficam sem url - a CVM/SEC ja cobre o que filarem.
+# Editar aqui e simples: chave do emissor -> URL da pagina de comunicados/fatos relevantes.
+RI_URLS = {
+    # --- BDRs dos EUA ---
+    "Alphabet": "https://abc.xyz/investor/", "Microsoft": "https://www.microsoft.com/en-us/investor",
+    "Nvidia": "https://investor.nvidia.com/",
+    # --- Acoes / BDRs BR ---
+    "Alupar": "https://ri.alupar.com.br/", "Anima Educacao": "https://ri.animaeducacao.com.br/",
+    "Automob": "https://ri.automob.com.br/", "BR Partners": "https://ri.brpartners.com.br/",
+    "Banco do Brasil": "https://ri.bb.com.br/", "BTG Pactual": "https://ri.btgpactual.com/",
+    "Cemig": "https://ri.cemig.com.br/", "Copasa": "https://ri.copasa.com.br/",
+    "Copel": "https://ri.copel.com/", "Cury": "https://ri.cury.net/",
+    "Metalurgica Gerdau": "https://ri.gerdau.com/", "Iguatemi": "https://ri.iguatemi.com.br/",
+    "Itausa": "https://www.itausa.com.br/", "Marcopolo": "https://ri.marcopolo.com.br/",
+    "Oncoclinicas": "https://ri.grupooncoclinicas.com/", "Petrobras": "https://www.investidorpetrobras.com.br/",
+    "PRIO": "https://ri.prio3.com.br/", "Randon": "https://ri.randoncorp.com/",
+    "TIM": "https://ri.tim.com.br/", "Track&Field": "https://ri.trackandfield.com.br/",
+    "Vale": "https://vale.com/investidores", "Vamos": "https://ri.grupovamos.com.br/",
+    "Vivara": "https://ri.vivara.com.br/", "WEG": "https://ri.weg.net/",
+    "Boa Safra": "https://ri.boasafrasementes.com.br/",
+    # --- Corporates BR (debentures / CRA / bonds) ---
+    "Klabin": "https://ri.klabin.com.br/", "Suzano": "https://ri.suzano.com.br/",
+    "Eletrobras": "https://ri.eletrobras.com/", "CSN": "https://ri.csn.com.br/",
+    "Sabesp": "https://ri.sabesp.com.br/", "Localiza": "https://ri.localiza.com/",
+    "Movida": "https://ri.movida.com.br/", "Neoenergia": "https://ri.neoenergia.com/",
+    "Ecorodovias": "https://ri.ecorodovias.com.br/", "Enauta": "https://ri.bravaenergia.com/",
+    "Simpar": "https://ri.simpar.com.br/", "BRK Ambiental": "https://www.ri.brkambiental.com.br/",
+    "Coelce": "https://www.enel.com.br/pt/investidores.html", "Enel SP": "https://www.enel.com.br/pt/investidores.html",
+    "Elfa": "https://ri.grupoelfa.com.br/", "Aeris": "https://www.ri.aerisenergy.com.br/",
+    "Raizen": "https://ri.raizen.com.br/", "Telefonica": "https://ri.telefonica.com.br/",
+    "Axia Energia": "https://ri.axiaenergia.com.br/",
+    # --- Bancos BR ---
+    "Itau Unibanco": "https://www.itau.com.br/relacoes-com-investidores/",
+    "Bradesco": "https://www.bradescori.com.br/", "Banco Pan": "https://ri.bancopan.com.br/",
+    "Banco BMG": "https://ri.bancobmg.com.br/", "Banco Original": "https://bancooriginal.com.br/relacoes/",
+    "Agibank": "https://ri.agibank.com.br/", "Banco Inter": "https://investors.inter.co/",
+    "Banco Fibra": "https://www.bancofibra.com.br/", "Banco BV": "https://www.bv.com.br/relacoes-com-investidores",
+    "PagBank": "https://investors.pagseguro.com/", "BNDES": "https://www.bndes.gov.br/wps/portal/site/home/relacoes-com-investidores",
+    "Banco C6": "https://www.c6bank.com.br/institucional/",
+    # --- Emissores dos EUA / exterior ---
+    "JPMorgan": "https://www.jpmorganchase.com/ir", "Goldman Sachs": "https://www.goldmansachs.com/investor-relations/",
+    "Morgan Stanley": "https://www.morganstanley.com/about-us-ir", "Citigroup": "https://www.citigroup.com/global/investors",
+    "Wells Fargo": "https://www.wellsfargo.com/about/investor-relations/", "Barclays": "https://home.barclays/investor-relations/",
+    "UBS": "https://www.ubs.com/global/en/investor-relations.html", "Oracle": "https://investor.oracle.com/",
+    "Occidental": "https://www.oxy.com/investors/", "Toyota": "https://global.toyota/en/ir/",
+    "Amazon": "https://ir.aboutamazon.com/", "Broadcom": "https://investors.broadcom.com/",
+    "Eli Lilly": "https://investor.lilly.com/", "ExxonMobil": "https://corporate.exxonmobil.com/investors",
+    "DoorDash": "https://ir.doordash.com/", "JBS": "https://ri.jbs.com.br/",
+}
+
+
 def construir_registro():
     """Monta o dict EMISSORES {chave: campos}. Reaproveita as 28 acoes de EMPRESAS e
-    acrescenta os emissores extra. A 'chave' e usada como issuer_key no mapeamento."""
+    acrescenta os emissores extra. A 'chave' e usada como issuer_key no mapeamento.
+    Aplica RI_URLS (pagina de RI de cada emissor) por cima."""
     reg = {}
     for nome in EMPRESAS:
         reg[nome] = _campos_acao(nome)
     for chave, campos in _EXTRA.items():
         campos.setdefault("ticker", "-")
         reg[chave] = campos
+    for chave, url in RI_URLS.items():
+        if chave in reg:
+            reg[chave]["ri_url"] = url
     return reg
 
 
