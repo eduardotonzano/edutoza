@@ -137,6 +137,7 @@ def buscar_fatos_relevantes(emissores=None):
     vistos = set()
     n_linhas = 0
     n_categoria = 0
+    n_emissor = 0   # casou um dos nossos emissores (antes do filtro de 24h)
     for linha in leitor:
         n_linhas += 1
         categoria = _norm(linha.get("Categoria", ""))
@@ -148,6 +149,7 @@ def buscar_fatos_relevantes(emissores=None):
                      if any(a in nome_cvm for a in aliases)), None)
         if not alvo:
             continue
+        n_emissor += 1
         ds = (linha.get("Data_Entrega") or linha.get("Data_Referencia") or "").strip()
         try:
             dt = datetime.strptime(ds[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
@@ -174,5 +176,6 @@ def buscar_fatos_relevantes(emissores=None):
             "score": 10, "relevancia": 10, "resumo_ia": "", "impacto": "",
             "corpo": f"{cat_label} da {disp}: {assunto}",
         })
-    print(f"  CVM diag: {n_linhas} linhas no IPE, {n_categoria} fatos/comunicados, {len(itens)} dos nossos emissores (24h)")
+    print(f"  CVM diag: {n_linhas} linhas no IPE, {n_categoria} fatos/comunicados, "
+          f"{n_emissor} dos nossos emissores (ano), {len(itens)} nas ultimas 24h")
     return itens

@@ -7,14 +7,17 @@ carteira e devolvemos no MESMO formato dos outros (fato_relevante.py), para entr
 'finais'. Qualquer falha e silenciosa (retorna [], nao derruba o run).
 """
 
-import requests, time
+import os, requests, time
 from datetime import datetime, timezone, timedelta
 
 JANELA_HORAS = 24
 TIMEOUT = 20
-# A SEC pede um User-Agent identificavel com contato. String generica do projeto
-# (repo publico -> sem e-mail pessoal). A SEC aceita qualquer contato plausivel.
-SEC_HEADERS = {"User-Agent": "edutoza-portfolio-monitor (contato via github.com/eduardotonzano)"}
+# A SEC EXIGE um User-Agent com e-mail de contato real; sem isso devolve HTTP 403.
+# O e-mail vem da variavel SEC_CONTACT (no workflow, do segredo MAIL_USERNAME), entao
+# nao fica escrito no codigo. Fallback generico se a variavel nao existir.
+_CONTATO = os.environ.get("SEC_CONTACT") or "monitor@example.com"
+SEC_HEADERS = {"User-Agent": f"edutoza-portfolio-monitor {_CONTATO}",
+               "Accept-Encoding": "gzip, deflate"}
 _TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 _SUBMISSIONS = "https://data.sec.gov/submissions/CIK{cik10}.json"
 FORMS = {"8-K", "6-K"}

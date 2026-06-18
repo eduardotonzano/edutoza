@@ -40,6 +40,9 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PULAR_GDELT: ${{ github.event.inputs.pular_gdelt == 'true' && '1' || '' }}
+          # A SEC exige e-mail de contato no User-Agent (senao da 403). Usa o mesmo
+          # e-mail do envio (segredo MAIL_USERNAME); nao fica escrito no codigo.
+          SEC_CONTACT: ${{ secrets.MAIL_USERNAME }}
         run: python -u main.py --carteira carteira_completa.csv --saida relatorio.xlsx
 
       - name: Descobrir a data de hoje (Brasília)
