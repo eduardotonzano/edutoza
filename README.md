@@ -66,12 +66,42 @@ robusto e, idealmente, automatizado (rodar sozinho toda manhã).
 - Nomes ambíguos (Apple, Ford, Roche, BP, Merck) exigem termo de contexto para
   evitar falsos positivos (Harrison Ford, La Roche-Posay, Merck KGaA alemã).
 
+## Cobertura: TODA a base (340 ativos), monitorada por EMISSOR
+O `carteira_completa.csv` (340 ativos: ações, BDRs, bonds, CDB, debêntures, CRA, LCA,
+fundos, FIIs, títulos públicos…) é a fonte da verdade. Como um CDB ou uma debênture não
+tem "notícia", o robô monitora o **emissor** por trás de cada ativo (o banco/empresa).
+Vários ativos colapsam num só emissor (ex.: dezenas de CDBs do BTG → um emissor). O
+relatório lista **todos os 340 ativos** com um STATUS: *notícia encontrada* / *sem notícia
+hoje* / *sem notícia aplicável* (Tesouro/governo e fundos sem empresa pública).
+
+### Fontes (todas gratuitas)
+- **GDELT** — imprensa global/BR Tier 1 (notícia das últimas 24h), em lotes com `OR`.
+- **CVM (dados.cvm.gov.br)** — fatos relevantes/comunicados oficiais de TODOS os emissores
+  BR (feed IPE). Validado: ~900 filings/ano dos nossos emissores casam.
+- **SEC/EDGAR (data.sec.gov)** — eventos materiais (8-K/6-K) dos emissores dos EUA
+  (JPMorgan, Goldman, Oracle, Toyota, Broadcom…). Exige e-mail de contato no User-Agent
+  (vem do segredo `MAIL_USERNAME` via `SEC_CONTACT`).
+- **RI (best-effort)** — raspagem das páginas de Relações com Investidores dos emissores
+  que tiverem `ri_url` no registro (aditivo; CVM/SEC continuam os canais autoritativos).
+
 ## Estrutura dos arquivos
-- `empresas.py`   — dicionário das 28 empresas da carteira (busca/forte/fraco/contexto/ticker).
-- `coleta.py`     — busca no Google News, download paralelo, validação.
-- `excel.py`      — geração do relatório Excel.
-- `main.py`       — orquestra tudo (lê carteira → coleta → valida → Excel).
+- `carteira_completa.csv` — a base inteira (340 ativos: ATIVO, TIPO, MOEDA, CATEGORIA).
+- `emissores.py`  — registro central de ~92 emissores (busca/forte/fraco/contexto, aliases
+  da CVM, CIK/ticker da SEC, ri_url, `news_applicable`). Reaproveita `empresas.py`.
+- `empresas.py`   — dicionário-base das 28 ações (busca/forte/fraco/contexto/ticker).
+- `mapeamento.py` — liga cada um dos 340 ativos ao seu emissor.
+- `coleta.py`     — GDELT (lotes com OR), download isolado em processos, validação.
+- `fato_relevante.py` — fatos relevantes da CVM (IPE).
+- `sec_edgar.py`  — fatos relevantes (8-K/6-K) da SEC/EDGAR.
+- `ri_scraping.py`— raspagem best-effort das páginas de RI.
+- `resumo_ia.py`  — resumo/impacto via Google Gemini (gratuito, opcional).
+- `excel.py`      — relatório com abas NOTICIAS, CARTEIRA (340 ativos+status), EMISSORES.
+- `main.py`       — orquestra: base → GDELT + CVM + SEC + RI → dedup → IA → Excel.
 - `requirements.txt` — dependências.
+
+### Para testar sem acionar o limite do GDELT
+Na aba **Actions → Run workflow**, o campo **pular_gdelt = true** roda só as fontes
+oficiais (CVM/SEC/RI), sem tocar no GDELT — útil para validar sem esperar o cooldown do IP.
 
 ## Como rodar
 ```bash
