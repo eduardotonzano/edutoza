@@ -91,9 +91,18 @@ ALVOS = [
 ]
 
 
-def buscar_fatos_relevantes():
+def buscar_fatos_relevantes(emissores=None):
     """Baixa o IPE da CVM, filtra fatos relevantes/comunicados das ultimas 24h das
-    empresas da carteira e retorna itens no formato do relatorio. [] em qualquer falha."""
+    empresas da carteira e retorna itens no formato do relatorio. [] em qualquer falha.
+
+    `emissores` (opcional): lista de dicts do registro (emissores.py) com campos
+    nome/ticker/cvm_aliases. Se informado, os ALVOS sao montados a partir dela (cobre
+    todos os emissores BR da base). Sem isso, usa a lista fixa ALVOS (compatibilidade)."""
+    if emissores:
+        alvos = [(e["nome"], e.get("ticker", "-"), e["cvm_aliases"])
+                 for e in emissores if e.get("cvm_aliases")]
+    else:
+        alvos = ALVOS
     limite = datetime.now(timezone.utc) - timedelta(hours=JANELA_HORAS)
     texto = None
     for url in IPE_URLS:
@@ -131,7 +140,7 @@ def buscar_fatos_relevantes():
         if not any(c in categoria for c in CATEGORIAS):
             continue
         nome_cvm = _norm(linha.get("Nome_Companhia", ""))
-        alvo = next(((disp, tk) for disp, tk, aliases in ALVOS
+        alvo = next(((disp, tk) for disp, tk, aliases in alvos
                      if any(a in nome_cvm for a in aliases)), None)
         if not alvo:
             continue

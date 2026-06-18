@@ -1,6 +1,6 @@
 """Coleta de noticias (GDELT DOC API), download paralelo e validacao de relevancia."""
 
-import re, time, json, unicodedata, base64, requests, trafilatura
+import re, time, json, unicodedata, base64, random, requests, trafilatura
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict, Counter
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -16,6 +16,7 @@ GDELT_MAX     = 250    # artigos por consulta (250 = teto do GDELT DOC API)
 GDELT_RETRIES = 3      # tentativas por LOTE quando o GDELT vier erro (throttle/429)
 GDELT_PAUSA   = 6      # segundos entre lotes (o GDELT limita ~1 req a cada poucos seg)
 GDELT_BATCH   = 7      # empresas por lote: poucas consultas (OR) evitam o limite de taxa
+GDELT_BUDGET  = 240    # teto de tempo (s) p/ a coleta GDELT: se estourar, segue com o parcial
 
 # LISTA BRANCA (allowlist): so noticias destas fontes Tier 1 sao aceitas. Qualquer
 # dominio que nao bata com um destes termos e descartado (corta sites de "fulano
@@ -254,12 +255,19 @@ def coletar_candidatos(empresas):
     empresa certa e feita depois, no validar_todos (exige o nome no titulo)."""
     limite = datetime.now(timezone.utc) - timedelta(hours=JANELA_HORAS)
     queries = _montar_lotes(empresas, GDELT_BATCH)
+    random.shuffle(queries)   # ordem aleatoria: um 429 no meio nao penaliza sempre os mesmos
 
     artigos = []
     n_erros = 0
+    feitos = 0
+    t0 = time.time()
     for i, q in enumerate(queries):
+        if time.time() - t0 > GDELT_BUDGET:
+            print(f"  GDELT: orcamento de tempo atingido ({GDELT_BUDGET}s); {feitos}/{len(queries)} lotes feitos")
+            break
         try:
             artigos.extend(buscar_gdelt(q, maxrecords=GDELT_MAX))
+            feitos += 1
         except Exception as e:
             n_erros += 1
             msg = str(e)[:50]
@@ -271,7 +279,7 @@ def coletar_candidatos(empresas):
                 break
         if i < len(queries) - 1:
             time.sleep(GDELT_PAUSA)
-    print(f"  GDELT: {len(queries)} lotes, {len(artigos)} artigos brutos, {n_erros} erros")
+    print(f"  GDELT: {feitos}/{len(queries)} lotes ok, {len(artigos)} artigos brutos, {n_erros} erros")
 
     # Dedup por link e por titulo normalizado; aplica janela de 24h e allowlist de fontes.
     candidatos = {}

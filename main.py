@@ -1,67 +1,103 @@
-"""Orquestra o pipeline completo: carteira -> coleta -> download -> validacao -> Excel.
+"""Pipeline: carteira(340 ativos) -> emissores -> [GDELT + CVM + SEC + RI] -> Excel.
 
 Uso:
-    python main.py --carteira Planilha_para_API.xlsx
-    python main.py --carteira Planilha_para_API.xlsx --saida relatorio.xlsx
+    python main.py --carteira carteira_completa.csv --saida relatorio.xlsx
 
-A planilha precisa ter uma aba CARTEIRA com colunas TICKER e NOME.
+Le carteira_completa.csv (colunas ATIVO,TIPO,MOEDA,CATEGORIA), mapeia cada ativo ao seu
+EMISSOR (mapeamento.py / emissores.py), monitora cada emissor em varias fontes gratuitas e
+gera um Excel que lista TODOS os ativos com status (noticia encontrada / sem noticia hoje /
+sem noticia aplicavel).
 """
 
 import argparse
-import pandas as pd
+from collections import Counter
 
-from empresas import EMPRESAS, carregar_tickers
-from coleta import coletar_candidatos, baixar_corpos, validar_todos
+from emissores import EMISSORES
+from mapeamento import mapear_carteira
+from coleta import coletar_candidatos, baixar_corpos, validar_todos, norm
+from fato_relevante import buscar_fatos_relevantes
+from sec_edgar import buscar_fatos_sec
+from ri_scraping import raspar_ris
 from excel import gerar_excel
 from resumo_ia import preencher_resumos, ATIVADO as IA_ATIVA
-from fato_relevante import buscar_fatos_relevantes
+
+
+def _dedup(itens):
+    """Remove duplicatas por link e por (emissor+titulo), preferindo maior relevancia
+    (oficial CVM/SEC=10 > RI=8 > GDELT). Mantem a 1a ocorrencia de cada."""
+    itens = sorted(itens, key=lambda x: -x.get("relevancia", 0))
+    vistos_link, vistos_tit, out = set(), set(), []
+    for it in itens:
+        link = it.get("link", "")
+        tit = norm(f"{it.get('nome','')} {it.get('titulo','')}")
+        if link and link in vistos_link:
+            continue
+        if tit in vistos_tit:
+            continue
+        if link:
+            vistos_link.add(link)
+        vistos_tit.add(tit)
+        out.append(it)
+    return out
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Monitor de noticias da carteira")
-    ap.add_argument("--carteira", required=True, help="caminho do .xlsx com a aba CARTEIRA")
+    ap = argparse.ArgumentParser(description="Monitor de noticias da carteira (toda a base)")
+    ap.add_argument("--carteira", default="carteira_completa.csv",
+                    help="CSV da base (colunas ATIVO,TIPO,MOEDA,CATEGORIA)")
     ap.add_argument("--saida", default=None, help="nome do Excel de saida (opcional)")
     args = ap.parse_args()
 
-    print("1/5 Lendo carteira...")
-    df = pd.read_excel(args.carteira, sheet_name="CARTEIRA")
-    empresas = carregar_tickers(df)
-    print(f"    {len(empresas)} empresas carregadas")
+    print("1/6 Lendo a base e mapeando ativo -> emissor...")
+    alvos = mapear_carteira(args.carteira)
+    n_aplic = len([a for a in alvos if a["news_applicable"]])
+    print(f"    {len(alvos)} ativos | {n_aplic} com emissor monitoravel")
 
-    print("2/5 Coletando candidatos no GDELT...")
-    candidatos = coletar_candidatos(empresas)
+    # Subconjuntos do registro (por NOME de exibicao, p/ casar com as outras fontes).
+    gdelt_reg = {c["nome"]: c for c in EMISSORES.values() if c["news_applicable"] and c.get("busca")}
+    cvm_em = [c for c in EMISSORES.values() if c["news_applicable"] and c.get("cvm_aliases")]
+    us_em  = [c for c in EMISSORES.values() if c["news_applicable"] and (c.get("sec_cik") or c.get("sec_ticker"))]
+    ri_em  = [c for c in EMISSORES.values() if c.get("ri_url")]
+
+    print(f"2/6 Coletando noticias no GDELT ({len(gdelt_reg)} emissores)...")
+    candidatos = coletar_candidatos(gdelt_reg)
     print(f"    {len(candidatos)} candidatos unicos")
 
-    print("3/5 Baixando corpos em paralelo e validando relevancia...")
+    print("3/6 Baixando corpos e validando relevancia...")
     corpos = baixar_corpos(candidatos)
-    finais, sem_corpo, fora_janela = validar_todos(candidatos, corpos, empresas)
+    gdelt_finais, sem_corpo, fora_janela = validar_todos(candidatos, corpos, gdelt_reg)
+    cobertos = len(Counter(n["nome"] for n in gdelt_finais))
+    print(f"    {len(gdelt_finais)} noticias | {cobertos} emissores cobertos "
+          f"({sem_corpo} sem corpo, {fora_janela} fora da janela)")
 
-    from collections import Counter
-    cont = Counter(n["nome"] for n in finais)
-    print(f"    {len(finais)} noticias validadas | {len(cont)}/{len(empresas)} ativos cobertos")
-    print(f"    ({sem_corpo} sem corpo | {fora_janela} cortadas por data > 24h)")
+    print(f"4/6 Fatos relevantes (CVM {len(cvm_em)} | SEC {len(us_em)} | RI {len(ri_em)})...")
+    fatos_cvm = buscar_fatos_relevantes(cvm_em)
+    print(f"    CVM: {len(fatos_cvm)} fatos relevantes/comunicados")
+    fatos_sec = buscar_fatos_sec(us_em)
+    print(f"    SEC: {len(fatos_sec)} filings (8-K/6-K) nas ultimas 24h")
+    fatos_ri = raspar_ris(ri_em)
+    print(f"    RI: {len(fatos_ri)} releases raspados")
 
-    print("3.5/5 Buscando fatos relevantes na CVM (oficial)...")
-    fatos = buscar_fatos_relevantes()
-    print(f"    {len(fatos)} fatos relevantes/comunicados nas ultimas 24h")
-    finais = fatos + finais   # fatos relevantes (oficiais) entram no topo
+    finais = _dedup(fatos_sec + fatos_cvm + fatos_ri + gdelt_finais)
+    finais.sort(key=lambda x: (str(x["ticker"]), -x["data_obj"].timestamp()))
+    print(f"    {len(finais)} itens apos juntar e deduplicar")
 
-    print("4/5 Resumindo com IA (Google Gemini)...")
+    print("5/6 Resumindo com IA (Google Gemini)...")
     if IA_ATIVA:
         n_res = preencher_resumos(finais)
         print(f"    {n_res} resumos gerados")
     else:
         print("    (pulado: GEMINI_API_KEY nao configurada)")
 
-    print("5/5 Gerando Excel...")
-    arq, n_not, n_ativos = gerar_excel(finais, empresas, args.saida)
+    print("6/6 Gerando Excel...")
+    arq, n_not, n_mon = gerar_excel(alvos, finais, args.saida)
     print(f"    Pronto: {arq}")
 
     print("\n--- MATCHES (confira a qualidade) ---")
     for n in finais:
-        prem = "*" if n["premium"] else " "
-        print(f"{prem}[{n['ticker']:14}] {n['nome']:20} | rel {n['relevancia']} | {n['fonte'][:20]}")
-        print(f"   {n['titulo'][:72]}")
+        prem = "*" if n.get("premium") else " "
+        print(f"{prem}[{str(n['ticker'])[:14]:14}] {n['nome'][:20]:20} | rel {n['relevancia']} | {n['fonte'][:22]}")
+        print(f"   {n['titulo'][:74]}")
 
 
 if __name__ == "__main__":
