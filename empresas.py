@@ -66,8 +66,8 @@ EMPRESAS = {
    "contexto":["joalheria","joias","life","varejo","relogios","lojas"],"ticker":"VIVA3"},
  "WEG": {"busca":"WEG equipamentos","forte":["weg"],"fraco":[],
    "contexto":["motores","equipamentos eletricos","jaragua","industria","automacao","energia","exportacao"],"ticker":"WEGE3"},
- "Boa Safra": {"busca":"Boa Safra sementes","forte":["boa safra"],"fraco":[],
-   "contexto":["sementes","soja","agro","agronegocio","plantio","graos"],"ticker":"SOJA3"},
+ "Boa Safra": {"busca":"Boa Safra sementes","forte":[],"fraco":["boa safra"],
+   "contexto":["sementes","soja","agro","agronegocio","plantio","graos","soja3"],"ticker":"SOJA3"},
 }
 
 
