@@ -8,6 +8,11 @@ on:
     - cron: "0 20 * * *"
   # 2) Manualmente, pelo botão "Run workflow" na aba Actions.
   workflow_dispatch:
+    inputs:
+      pular_gdelt:
+        description: "Pular o GDELT (teste das fontes oficiais sem acionar o limite de IP)"
+        required: false
+        default: "false"
 
 jobs:
   monitorar:
@@ -34,6 +39,7 @@ jobs:
         # ficam vazias e o resto roda normal. Pegue a chave em https://aistudio.google.com.
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PULAR_GDELT: ${{ github.event.inputs.pular_gdelt == 'true' && '1' || '' }}
         run: python -u main.py --carteira carteira_completa.csv --saida relatorio.xlsx
 
       - name: Descobrir a data de hoje (Brasília)

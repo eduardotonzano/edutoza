@@ -48,16 +48,24 @@ def buscar_fatos_sec(emissores_us):
     limite = (datetime.now(timezone.utc) - timedelta(hours=JANELA_HORAS)).date()
     mapa = carregar_mapa_cik()
     itens = []
+    n_cik, n_ok, n_falha = 0, 0, 0   # diagnostico de alcance
+    ultimo_status = None
     for emissor in emissores_us:
         cik = _resolver_cik(emissor, mapa)
         if not cik:
             continue
+        n_cik += 1
         try:
             r = requests.get(_SUBMISSIONS.format(cik10=cik), headers=SEC_HEADERS, timeout=TIMEOUT)
+            ultimo_status = r.status_code
             if r.status_code != 200:
+                n_falha += 1
                 continue
             recent = (r.json().get("filings") or {}).get("recent") or {}
-        except Exception:
+            n_ok += 1
+        except Exception as e:
+            n_falha += 1
+            ultimo_status = str(e)[:40]
             continue
         forms = recent.get("form") or []
         datas = recent.get("filingDate") or []
@@ -93,4 +101,6 @@ def buscar_fatos_sec(emissores_us):
                 "corpo": corpo,
             })
         time.sleep(0.2)   # cortesia com a SEC (limite informal ~10 req/s)
+    print(f"  SEC diag: tickers_map={len(mapa)} cik_resolvidos={n_cik} "
+          f"submissions_ok={n_ok} falhas={n_falha} ultimo_status={ultimo_status}")
     return itens

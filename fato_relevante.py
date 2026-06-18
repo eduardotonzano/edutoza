@@ -135,10 +135,14 @@ def buscar_fatos_relevantes(emissores=None):
     leitor = csv.DictReader(io.StringIO(texto), delimiter=";")
     itens = []
     vistos = set()
+    n_linhas = 0
+    n_categoria = 0
     for linha in leitor:
+        n_linhas += 1
         categoria = _norm(linha.get("Categoria", ""))
         if not any(c in categoria for c in CATEGORIAS):
             continue
+        n_categoria += 1
         nome_cvm = _norm(linha.get("Nome_Companhia", ""))
         alvo = next(((disp, tk) for disp, tk, aliases in alvos
                      if any(a in nome_cvm for a in aliases)), None)
@@ -170,4 +174,5 @@ def buscar_fatos_relevantes(emissores=None):
             "score": 10, "relevancia": 10, "resumo_ia": "", "impacto": "",
             "corpo": f"{cat_label} da {disp}: {assunto}",
         })
+    print(f"  CVM diag: {n_linhas} linhas no IPE, {n_categoria} fatos/comunicados, {len(itens)} dos nossos emissores (24h)")
     return itens

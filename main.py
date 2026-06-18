@@ -9,7 +9,7 @@ gera um Excel que lista TODOS os ativos com status (noticia encontrada / sem not
 sem noticia aplicavel).
 """
 
-import argparse
+import argparse, os
 from collections import Counter
 
 from emissores import EMISSORES
@@ -59,16 +59,22 @@ def main():
     us_em  = [c for c in EMISSORES.values() if c["news_applicable"] and (c.get("sec_cik") or c.get("sec_ticker"))]
     ri_em  = [c for c in EMISSORES.values() if c.get("ri_url")]
 
-    print(f"2/6 Coletando noticias no GDELT ({len(gdelt_reg)} emissores)...")
-    candidatos = coletar_candidatos(gdelt_reg)
-    print(f"    {len(candidatos)} candidatos unicos")
+    if os.environ.get("PULAR_GDELT"):
+        # Modo de teste: pula o GDELT (para validar CVM/SEC/RI sem re-acionar o
+        # cooldown do IP no GDELT). Em producao a variavel nao existe.
+        print("2-3/6 GDELT PULADO (PULAR_GDELT setado)")
+        gdelt_finais = []
+    else:
+        print(f"2/6 Coletando noticias no GDELT ({len(gdelt_reg)} emissores)...")
+        candidatos = coletar_candidatos(gdelt_reg)
+        print(f"    {len(candidatos)} candidatos unicos")
 
-    print("3/6 Baixando corpos e validando relevancia...")
-    corpos = baixar_corpos(candidatos)
-    gdelt_finais, sem_corpo, fora_janela = validar_todos(candidatos, corpos, gdelt_reg)
-    cobertos = len(Counter(n["nome"] for n in gdelt_finais))
-    print(f"    {len(gdelt_finais)} noticias | {cobertos} emissores cobertos "
-          f"({sem_corpo} sem corpo, {fora_janela} fora da janela)")
+        print("3/6 Baixando corpos e validando relevancia...")
+        corpos = baixar_corpos(candidatos)
+        gdelt_finais, sem_corpo, fora_janela = validar_todos(candidatos, corpos, gdelt_reg)
+        cobertos = len(Counter(n["nome"] for n in gdelt_finais))
+        print(f"    {len(gdelt_finais)} noticias | {cobertos} emissores cobertos "
+              f"({sem_corpo} sem corpo, {fora_janela} fora da janela)")
 
     print(f"4/6 Fatos relevantes (CVM {len(cvm_em)} | SEC {len(us_em)} | RI {len(ri_em)})...")
     fatos_cvm = buscar_fatos_relevantes(cvm_em)
