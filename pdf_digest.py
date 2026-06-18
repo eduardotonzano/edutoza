@@ -78,12 +78,20 @@ def gerar_pdf(finais, caminho="Principais_Noticias_24h.pdf"):
         fluxo.append(Paragraph(escape(f"{nome}  ({tk})"), s["Emissor"]))
         for n in itens:
             resumo = (n.get("resumo_ia") or "").strip() or n.get("titulo", "")
+            otimista = (n.get("otimista") or "").strip()
+            cetico = (n.get("cetico") or "").strip()
             impacto = (n.get("impacto") or "").strip()
             fluxo.append(Paragraph(escape(n.get("titulo", "")), s["Titulo"]))
             fluxo.append(Paragraph(
                 escape(f"{n.get('fonte','')}  •  {n.get('data','')}  •  relevancia {n.get('relevancia','')}"),
                 s["Meta"]))
             fluxo.append(Paragraph(escape(resumo), s["Corpo"]))
+            if otimista:
+                fluxo.append(Paragraph(
+                    f'<b><font color="#1B7F37">Analista otimista:</font></b> {escape(otimista)}', s["Corpo"]))
+            if cetico:
+                fluxo.append(Paragraph(
+                    f'<b><font color="#B00020">Analista cetico:</font></b> {escape(cetico)}', s["Corpo"]))
             if impacto:
                 fluxo.append(Paragraph(
                     f'<b><font color="{_imp_cor(impacto)}">Impacto:</font></b> {escape(impacto)}',

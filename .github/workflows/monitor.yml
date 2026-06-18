@@ -38,6 +38,10 @@ jobs:
         # robo preenche RESUMO IA e IMPACTO com o Google Gemini. Sem ela, essas colunas
         # ficam vazias e o resto roda normal. Pegue a chave em https://aistudio.google.com.
         env:
+          # Resumo de IA com 2 analistas (otimista x cetico): Claude Haiku (principal, PAGO)
+          # + Gemini (reserva, gratis). Cadastre ANTHROPIC_API_KEY (com creditos) e/ou
+          # GEMINI_API_KEY em Settings > Secrets. Sem nenhuma, o resumo e pulado.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PULAR_GDELT: ${{ github.event.inputs.pular_gdelt == 'true' && '1' || '' }}
           # A SEC exige e-mail de contato no User-Agent (senao da 403). Usa o mesmo

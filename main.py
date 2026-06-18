@@ -99,12 +99,11 @@ def main():
     finais.sort(key=lambda x: (str(x["ticker"]), -x["data_obj"].timestamp()))
     print(f"    {len(finais)} itens apos juntar e deduplicar")
 
-    print("5/6 Resumindo com IA (Google Gemini)...")
+    print("5/6 Resumindo com IA (Claude Haiku + Gemini reserva, 2 analistas)...")
     if IA_ATIVA:
-        n_res = preencher_resumos(finais)
-        print(f"    {n_res}/{len(finais)} itens com resumo de IA")
+        preencher_resumos(finais)
     else:
-        print("    (pulado: GEMINI_API_KEY nao configurada)")
+        print("    (pulado: nenhuma chave de IA configurada)")
 
     print("6/6 Gerando Excel e PDF...")
     arq, n_not, n_mon = gerar_excel(alvos, finais, args.saida)
