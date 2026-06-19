@@ -72,4 +72,25 @@ oficial enquanto isso. Sem ação necessária agora — só registrando.
 
 ---
 
+## 5) (FEITO em parte) Fontes especializadas por classe de ativo
+
+As 32 fontes do seu JSON foram **inseridas** (arquivo `fontes_especializadas.json`):
+- **Todos os domínios** entraram na allowlist → as manchetes deles passam, inclusive das
+  pagas (Debtwire, Reorg, 9fin, IFR, GlobalCapital), via Google News.
+- Os **~15 feeds RSS** reais foram ligados (Valor, Clube FII, Status Invest, Capital Aberto,
+  CVM notícias, S&P, Moody's, Fitch, SIFMA, etc.).
+
+**Ficou para depois (decisão sua de não fazer agora):**
+- **APIs regulatórias de bonds:** SEC EDGAR full-text de prospectos **424B**, **B3** Renda
+  Fixa e **FINRA TRACE**. Dão mais cobertura de dívida, mas cada uma exige integração própria.
+- **Scrapers de HTML** dos portais sem RSS (Anbima, Uqbar, Pipeline Valor, FIDC.net, Austin,
+  LF Rating). Frágeis (mudam de layout) e vários bloqueiam datacenter.
+
+**Follow-up importante (recall):** uma fonte de crédito só "casa" uma notícia se o **emissor
+estiver cadastrado** com seus nomes em `emissores.py` (campos forte/fraco). Muitos emissores
+de debênture/CDB/CRA/CRI/FIDC ainda não têm alias de nome lá → não serão capturados mesmo com
+as fontes novas. Ampliar esse cadastro é o próximo passo para a renda fixa render de verdade.
+
+---
+
 _Última atualização: 19/06/2026._

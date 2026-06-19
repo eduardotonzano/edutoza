@@ -64,6 +64,9 @@ def main():
     ri_em  = [c for c in EMISSORES.values() if c.get("ri_url")]
 
     print("2/6 Coletando imprensa (GDELT + Google News + RSS Tier 1 + Yahoo + API)...")
+    from coleta import FONTES_ESPECIALIZADAS, FEEDS_ESPECIALIZADOS
+    print(f"    Fontes especializadas: {len(FONTES_ESPECIALIZADAS)} dominios na allowlist, "
+          f"{len(FEEDS_ESPECIALIZADOS)} feeds RSS (renda fixa/credito/rating)")
     emissores_lista = list(gdelt_reg.values())
     candidatos = {}
     if os.environ.get("PULAR_GDELT"):

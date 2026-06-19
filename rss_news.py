@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from coleta import (montar_candidato, fonte_ok, conta, norm, _eh_macro,
-                    JANELA_HORAS, HEADERS)
+                    JANELA_HORAS, HEADERS, FEEDS_ESPECIALIZADOS)
 
 TIMEOUT = 10
 YAHOO_WORKERS = 6
@@ -44,6 +44,12 @@ FEEDS = [
     "https://www.cnnbrasil.com.br/economia/feed/",
     "https://www.suno.com.br/noticias/feed/",
 ]
+# Acrescenta os feeds das fontes especializadas (fontes_especializadas.json): rating
+# agencies, imprensa de credito e portais de renda fixa. Dedup preservando a ordem; feed
+# morto/bloqueado e ignorado em silencio (mesma logica dos demais).
+for _f in FEEDS_ESPECIALIZADOS:
+    if _f not in FEEDS:
+        FEEDS.append(_f)
 
 # Feeds do Yahoo Finance por ticker (cobre as acoes/BDRs com ticker de bolsa).
 _YAHOO = "https://feeds.finance.yahoo.com/rss/2.0/headline?s={sym}&region={reg}&lang={lang}"
@@ -136,7 +142,7 @@ def coletar_feeds_tier1(empresas):
 
     candidatos = {}
     n_itens_total = 0
-    with ThreadPoolExecutor(max_workers=8) as ex:
+    with ThreadPoolExecutor(max_workers=12) as ex:
         futuros = {ex.submit(_baixar_feed, u): u for u in FEEDS}
         for fut in as_completed(futuros):
             url = futuros[fut]

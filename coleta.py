@@ -60,6 +60,41 @@ FONTES_TIER1_5 = [
 # Lista efetiva de fontes aceitas (Tier 1 + Tier 1.5).
 FONTES_ACEITAS = FONTES_TIER1 + FONTES_TIER1_5
 
+# ----- Fontes especializadas por classe de ativo (renda fixa / credito / bonds) -----
+# Carregadas de fontes_especializadas.json (ao lado deste modulo). Para CADA fonte da
+# lista, o DOMINIO entra na allowlist (assim a manchete dela passa, inclusive das pagas,
+# quando aparece via Google News/GDELT). As que tem RSS de verdade viram FEEDS_ESPECIALIZADOS
+# (consumidos pelo rss_news). Se o arquivo faltar/quebrar, segue com listas vazias (o robo
+# nunca para por causa disso).
+import os as _os
+from urllib.parse import urlparse as _urlparse
+
+def _carregar_fontes_especializadas():
+    """Le fontes_especializadas.json e devolve (dominios, feeds_rss). Tolerante a erro."""
+    caminho = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                            "fontes_especializadas.json")
+    dominios, feeds = [], []
+    try:
+        with open(caminho, encoding="utf-8") as fh:
+            dados = json.load(fh)
+        for fonte in dados.get("fontes", []):
+            base = (fonte.get("url_base") or "").strip()
+            if base:
+                dom = _urlparse(base).netloc.lower().replace("www.", "")
+                if dom:                       # ja e ascii/minusculo (compativel com fonte_ok)
+                    dominios.append(dom)
+            rss = (fonte.get("rss") or "").strip()
+            # So feeds RSS reais: http(s) e sem placeholder (ex.: o template {DATA} do SEC).
+            if rss.startswith("http") and "{" not in rss:
+                feeds.append(rss)
+    except Exception as e:
+        print(f"  (fontes_especializadas.json nao carregado: {str(e)[:60]})")
+    return dominios, feeds
+
+FONTES_ESPECIALIZADAS, FEEDS_ESPECIALIZADOS = _carregar_fontes_especializadas()
+# Os dominios especializados tambem valem como fontes aceitas na curadoria.
+FONTES_ACEITAS = FONTES_ACEITAS + [d for d in FONTES_ESPECIALIZADAS if d not in FONTES_ACEITAS]
+
 # Subconjunto "top" usado apenas como bonus de pontuacao (desempate).
 FONTES_PREMIUM = ["reuters","bloomberg","cnbc","financial times","ft.com","wall street journal",
     "wsj","marketwatch","barron","forbes","fortune","valor","infomoney",
