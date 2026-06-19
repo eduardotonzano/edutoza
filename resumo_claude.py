@@ -1,57 +1,92 @@
-"""Backend de resumo via Claude Haiku (API da Anthropic) - PRINCIPAL (pago).
+"""Backend de resumo via Claude Code (Haiku) em modo headless - RESERVA gratuita.
 
-Gera, para cada noticia, a visao de DOIS analistas (otimista x cetico) + resumo + impacto.
-So roda se ANTHROPIC_API_KEY existir. Uma falha devolve (None, status) e o coordenador
-(resumo_ia.py) cai para o Gemini (gratuito) como reserva.
+Em vez da API paga da Anthropic, invoca o CLI do Claude Code
+(`claude -p ... --model claude-haiku-4-5 --output-format json`), autenticado pela ASSINATURA
+Pro/Max do dono atraves da env CLAUDE_CODE_OAUTH_TOKEN (gerada com `claude setup-token`).
+Gera, por noticia, a visao de DOIS analistas (otimista x cetico) + resumo + impacto.
+
+So fica ATIVADO se CLAUDE_CODE_OAUTH_TOKEN existir E o binario `claude` estiver no PATH.
+Trabalha em LOTES (varias noticias por chamada) para diluir o custo de subir o processo do
+CLI. Qualquer falha devolve (None, motivo); o coordenador (resumo_ia.py) usa o Gemini como
+principal e este como reserva.
 """
 
-import os, json, re, requests
+import os, json, re, shutil, subprocess
 
 MODELO = "claude-haiku-4-5"
-URL = "https://api.anthropic.com/v1/messages"
-TIMEOUT = 40
-ATIVADO = bool(os.environ.get("ANTHROPIC_API_KEY"))
+TIMEOUT = 120  # segundos por chamada do CLI (um lote)
+ATIVADO = bool(os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")) and bool(shutil.which("claude"))
 
 
 def _extrai_json(t):
-    """Extrai o objeto JSON da resposta (tolerante a texto em volta)."""
+    """Extrai um objeto OU lista JSON da resposta (tolerante a texto em volta)."""
+    if not t:
+        return None
     try:
         return json.loads(t)
     except Exception:
         pass
-    m = re.search(r"\{.*\}", t or "", re.S)
-    if m:
-        try:
-            return json.loads(m.group(0))
-        except Exception:
-            return None
+    for padrao in (r"\{.*\}", r"\[.*\]"):
+        m = re.search(padrao, t, re.S)
+        if m:
+            try:
+                return json.loads(m.group(0))
+            except Exception:
+                continue
     return None
 
 
-def resumir(chave, nome, titulo, corpo, prompt_fn):
-    """Chama o Claude Haiku. Retorna ((resumo, otimista, cetico, impacto), 200) ou
-    (None, status) em falha. `prompt_fn(nome, titulo, texto)` monta o pedido (compartilhado
-    com o backend Gemini, para a saida ser identica)."""
-    texto = (corpo or "").strip()[:3000] or titulo
-    body = {
-        "model": MODELO,
-        "max_tokens": 600,
-        "system": ("Voce e uma mesa de research buy-side com dois analistas. "
-                   "Responda SOMENTE com um JSON valido, sem texto fora do JSON."),
-        "messages": [{"role": "user", "content": prompt_fn(nome, titulo, texto)}],
-    }
+def _chamar_cli(prompt, timeout=TIMEOUT):
+    """Roda o Claude Code headless. Retorna (texto_do_modelo, None) ou (None, motivo)."""
+    if not shutil.which("claude"):
+        return None, "sem-cli"
+    cmd = ["claude", "-p", prompt, "--model", MODELO,
+           "--output-format", "json", "--max-turns", "1",
+           "--dangerously-skip-permissions"]
     try:
-        r = requests.post(URL, headers={"x-api-key": chave,
-                                        "anthropic-version": "2023-06-01",
-                                        "content-type": "application/json"},
-                          json=body, timeout=TIMEOUT)
-        if r.status_code != 200:
-            return None, r.status_code
-        txt = r.json()["content"][0]["text"]
-        d = _extrai_json(txt)
-        if not d:
-            return None, "parse"
-        return ((d.get("resumo", "") or "").strip(), (d.get("otimista", "") or "").strip(),
-                (d.get("cetico", "") or "").strip(), (d.get("impacto", "") or "").strip()), 200
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
+                              env={**os.environ})
+    except subprocess.TimeoutExpired:
+        return None, "timeout"
     except Exception as e:
         return None, str(e)[:40]
+    if proc.returncode != 0:
+        return None, f"rc{proc.returncode}:{(proc.stderr or '')[:60]}"
+    env = _extrai_json(proc.stdout)
+    if isinstance(env, dict) and "result" in env:   # envelope --output-format json
+        return env.get("result") or "", None
+    if proc.stdout:                                  # fallback: texto direto
+        return proc.stdout, None
+    return None, "vazio"
+
+
+def _campos(o):
+    return ((o.get("resumo", "") or "").strip(), (o.get("otimista", "") or "").strip(),
+            (o.get("cetico", "") or "").strip(), (o.get("impacto", "") or "").strip())
+
+
+def resumir_lote(itens, prompt_lote_fn, timeout=TIMEOUT):
+    """Resume varias noticias numa unica chamada do CLI.
+
+    itens: lista de dicts (nome/titulo/corpo). prompt_lote_fn(itens) monta o pedido pedindo
+    um JSON com a lista de resultados NA MESMA ORDEM. Retorna (lista_de_tuplas, 200) onde
+    cada elemento e (resumo, otimista, cetico, impacto) ou None; ou (None, motivo) em falha.
+    """
+    if not itens:
+        return [], 200
+    texto, err = _chamar_cli(prompt_lote_fn(itens), timeout)
+    if texto is None:
+        return None, err
+    d = _extrai_json(texto)
+    arr = None
+    if isinstance(d, dict):
+        arr = d.get("itens") or d.get("resumos") or d.get("results")
+    elif isinstance(d, list):
+        arr = d
+    if not isinstance(arr, list):
+        return None, "parse"
+    out = []
+    for i in range(len(itens)):
+        o = arr[i] if i < len(arr) and isinstance(arr[i], dict) else None
+        out.append(_campos(o) if o else None)
+    return out, 200

@@ -1,11 +1,13 @@
 """Resumo de IA com DOIS analistas (otimista x cetico) por noticia.
 
-Coordenador de dois backends:
-  - Claude Haiku (resumo_claude.py) = PRINCIPAL, se ANTHROPIC_API_KEY existir (pago).
-  - Google Gemini (aqui) = RESERVA gratuita, se GEMINI_API_KEY existir.
-Para cada noticia tenta o Claude; se falhar, cai para o Gemini. A etapa e LIMITADA por
-tempo (IA_BUDGET) e por cooldown (apos varias falhas seguidas de um provedor, para de usa-lo)
-para nunca travar o run. O que nao for resumido usa o titulo no PDF.
+Coordenador de dois backends GRATUITOS (nada de API paga):
+  - Google Gemini (aqui) = PRINCIPAL, se GEMINI_API_KEY existir (gratuito).
+  - Claude Code / Haiku (resumo_claude.py) = RESERVA, se CLAUDE_CODE_OAUTH_TOKEN existir
+    (roda pela ASSINATURA Pro/Max do dono, sem custo de API a parte).
+
+Funciona em 2 passes: 1) Gemini por item (em paralelo) ate a cota gratuita estourar;
+2) Claude Code/Haiku EM LOTES cobre o que sobrou. A etapa toda e limitada por tempo
+(IA_BUDGET). O que nao for resumido usa o titulo no PDF.
 
 Saida (4 campos): resumo (fato neutro), otimista (analista bull), cetico (analista bear),
 impacto (Positivo/Negativo/Neutro + justificativa).
@@ -16,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import resumo_claude
 
-# --- Gemini (reserva) ---
+# --- Gemini (principal) ---
 MODELOS = ["gemini-2.5-flash-lite", "gemini-2.0-flash-lite", "gemini-2.5-flash",
            "gemini-flash-latest", "gemini-2.0-flash"]
 _URL = "https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent"
@@ -27,10 +29,11 @@ _SCHEMA = {"type": "object", "properties": {
 
 WORKERS = 2
 TIMEOUT = 30
-IA_BUDGET = 180                # teto de tempo (s) p/ a etapa inteira
-MAX_FALHAS = 8                 # falhas seguidas de um provedor -> para de usa-lo (cooldown)
+IA_BUDGET = 420                # teto de tempo (s) p/ a etapa inteira (Gemini + Claude Code)
+MAX_FALHAS = 8                 # falhas seguidas do Gemini -> passa p/ a reserva
+LOTE_CLAUDE = 6                # noticias por chamada do CLI do Claude Code
 
-ATIVADO = bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("GEMINI_API_KEY"))
+ATIVADO = bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"))
 
 
 def _prompt(nome, titulo, texto):
@@ -41,6 +44,26 @@ def _prompt(nome, titulo, texto):
             f'em {nome} (por que e bom), 1 frase.\n'
             '- "cetico": parecer de um analista CETICO (riscos/contraponto), 1 frase.\n'
             '- "impacto": comece com Positivo, Negativo ou Neutro, + meia frase de justificativa.')
+
+
+def _prompt_lote(itens):
+    """Pede um JSON com a lista de resultados NA MESMA ORDEM (usado pelo Claude Code)."""
+    blocos = []
+    for i, n in enumerate(itens, 1):
+        texto = (n.get("corpo", "") or "").strip()[:1500] or n.get("titulo", "")
+        blocos.append(f"--- NOTICIA {i} ---\nEMPRESA: {n['nome']}\n"
+                      f"TITULO: {n['titulo']}\nTEXTO: {texto}")
+    corpo = "\n\n".join(blocos)
+    return ("Voce e uma mesa de research buy-side com dois analistas. Abaixo ha "
+            f"{len(itens)} noticias.\n\n{corpo}\n\n"
+            "Responda em portugues, SOMENTE com um JSON valido (sem texto fora dele) neste "
+            'formato:\n{"itens": [{"resumo": "...", "otimista": "...", "cetico": "...", '
+            '"impacto": "..."}]}\n'
+            f"A lista deve ter EXATAMENTE {len(itens)} objetos, NA MESMA ORDEM das noticias. "
+            'Em cada objeto: "resumo"=1 frase neutra do fato (sem opiniao); '
+            '"otimista"=parecer de analista bull (1 frase); "cetico"=parecer de analista '
+            'bear/riscos (1 frase); "impacto"=comece com Positivo, Negativo ou Neutro + '
+            "meia frase de justificativa.")
 
 
 def _resumir_gemini(chave, nome, titulo, corpo):
@@ -64,68 +87,77 @@ def _resumir_gemini(chave, nome, titulo, corpo):
     return None, ultimo
 
 
-def preencher_resumos(finais):
-    """Preenche resumo_ia/otimista/cetico/impacto de cada noticia. Claude principal +
-    Gemini reserva, limitado por tempo e cooldown. Retorna nº de itens resumidos."""
-    ck = os.environ.get("ANTHROPIC_API_KEY")
-    gk = os.environ.get("GEMINI_API_KEY")
-    if (not ck and not gk) or not finais:
-        return 0
-
-    t0 = time.time()
+def _passe_gemini(finais, chave, t0):
+    """Passe 1: Gemini por item, em paralelo. Para apos MAX_FALHAS seguidas ou no budget."""
+    pendentes = [n for n in finais if not n.get("resumo_ia")]
     parar = threading.Event()
-    claude_stop = threading.Event()
-    gem_stop = threading.Event()
-    if not ck:
-        claude_stop.set()
-    if not gk:
-        gem_stop.set()
+    falhas = {"n": 0}
+    feitos = {"n": 0}
+    trava = threading.Lock()
 
     def tarefa(n):
         if parar.is_set():
-            return n, None, None, None, None
-        nome, titulo, corpo = n["nome"], n["titulo"], n.get("corpo", "")
-        cstatus = gstatus = None
-        if ck and not claude_stop.is_set():
-            f, st = resumo_claude.resumir(ck, nome, titulo, corpo, _prompt)
-            if f:
-                return n, f, "claude", None, None
-            cstatus = st
-        if gk and not gem_stop.is_set():
-            f, st = _resumir_gemini(gk, nome, titulo, corpo)
-            if f:
-                return n, f, "gemini", cstatus, None
-            gstatus = st
-        return n, None, None, cstatus, gstatus
+            return n, None, None
+        f, st = _resumir_gemini(chave, n["nome"], n["titulo"], n.get("corpo", ""))
+        return n, f, st
 
-    feitos = {"claude": 0, "gemini": 0}
-    cl_falhas = gm_falhas = 0
     with ThreadPoolExecutor(max_workers=WORKERS) as ex:
-        futuros = [ex.submit(tarefa, n) for n in finais]
+        futuros = [ex.submit(tarefa, n) for n in pendentes]
         for fut in as_completed(futuros):
-            n, fields, prov, cstatus, gstatus = fut.result()
-            if fields:
-                n["resumo_ia"], n["otimista"], n["cetico"], n["impacto"] = fields
-                feitos[prov] += 1
-            # cooldown do Claude: erro de credito/chave (401/403) para na hora
-            if cstatus is not None:
-                cl_falhas += 1
-                if cstatus in (401, 403) or cl_falhas >= MAX_FALHAS:
-                    if not claude_stop.is_set():
-                        print(f"  IA: Claude indisponivel (status {cstatus}); usando Gemini")
-                    claude_stop.set()
-            elif prov == "claude":
-                cl_falhas = 0
-            if gstatus is not None:
-                gm_falhas += 1
-                if gm_falhas >= MAX_FALHAS and not gem_stop.is_set():
-                    print("  IA: Gemini esgotado/limite; parando os resumos")
-                    gem_stop.set()
-            elif prov == "gemini":
-                gm_falhas = 0
-            if (claude_stop.is_set() and gem_stop.is_set()) or (time.time() - t0 > IA_BUDGET):
-                parar.set()
+            n, f, st = fut.result()
+            with trava:
+                if f:
+                    n["resumo_ia"], n["otimista"], n["cetico"], n["impacto"] = f
+                    feitos["n"] += 1
+                    falhas["n"] = 0
+                elif st is not None:
+                    falhas["n"] += 1
+                    if falhas["n"] >= MAX_FALHAS and not parar.is_set():
+                        print("  IA: Gemini esgotado/limite; passando para o Claude Code")
+                        parar.set()
+                if time.time() - t0 > IA_BUDGET:
+                    parar.set()
+    return feitos["n"]
 
-    total = feitos["claude"] + feitos["gemini"]
-    print(f"  IA: {total}/{len(finais)} resumos (Claude {feitos['claude']} | Gemini {feitos['gemini']})")
+
+def _passe_claude(finais, t0):
+    """Passe 2: Claude Code/Haiku em lotes p/ o que ficou sem resumo. Reserva da assinatura."""
+    pendentes = [n for n in finais if not n.get("resumo_ia")]
+    if not pendentes:
+        return 0
+    feitos = falhas = 0
+    for i in range(0, len(pendentes), LOTE_CLAUDE):
+        if time.time() - t0 > IA_BUDGET:
+            print("  IA: tempo esgotado; encerrando o Claude Code")
+            break
+        lote = pendentes[i:i + LOTE_CLAUDE]
+        res, st = resumo_claude.resumir_lote(lote, _prompt_lote)
+        if not res:
+            falhas += 1
+            if st == "sem-cli" or falhas >= 3:
+                print(f"  IA: Claude Code indisponivel (status {st}); encerrando")
+                break
+            continue
+        falhas = 0
+        for n, campos in zip(lote, res):
+            if campos and campos[0]:
+                n["resumo_ia"], n["otimista"], n["cetico"], n["impacto"] = campos
+                feitos += 1
+    return feitos
+
+
+def preencher_resumos(finais):
+    """Preenche resumo_ia/otimista/cetico/impacto. Gemini principal + Claude Code reserva,
+    limitado por tempo. Retorna nº de itens resumidos."""
+    gk = os.environ.get("GEMINI_API_KEY")
+    usa_claude = resumo_claude.ATIVADO
+    if (not gk and not usa_claude) or not finais:
+        return 0
+
+    t0 = time.time()
+    g = _passe_gemini(finais, gk, t0) if gk else 0
+    c = _passe_claude(finais, t0) if (usa_claude and time.time() - t0 < IA_BUDGET) else 0
+
+    total = g + c
+    print(f"  IA: {total}/{len(finais)} resumos (Gemini {g} | Claude Code {c})")
     return total

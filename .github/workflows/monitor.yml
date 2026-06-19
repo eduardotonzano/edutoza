@@ -28,20 +28,31 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Instalar Node (para o Claude Code CLI)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       - name: Instalar dependências
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements.txt
+          # CLI do Claude Code: RESERVA gratis do resumo de IA (Haiku), autenticado pela
+          # assinatura Pro/Max via o segredo CLAUDE_CODE_OAUTH_TOKEN. Se falhar, o robo
+          # segue so com o Gemini (sem erro).
+          npm install -g @anthropic-ai/claude-code || echo "Claude Code CLI nao instalado (segue so com Gemini)"
 
       - name: Rodar o monitor
         # GEMINI_API_KEY (opcional, GRATUITA): se cadastrada em Settings > Secrets, o
         # robo preenche RESUMO IA e IMPACTO com o Google Gemini. Sem ela, essas colunas
         # ficam vazias e o resto roda normal. Pegue a chave em https://aistudio.google.com.
         env:
-          # Resumo de IA com 2 analistas (otimista x cetico): Claude Haiku (principal, PAGO)
-          # + Gemini (reserva, gratis). Cadastre ANTHROPIC_API_KEY (com creditos) e/ou
-          # GEMINI_API_KEY em Settings > Secrets. Sem nenhuma, o resumo e pulado.
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Resumo de IA com 2 analistas (otimista x cetico), 100% GRATUITO:
+          #   - Gemini (principal, gratis): segredo GEMINI_API_KEY (https://aistudio.google.com).
+          #   - Claude Code/Haiku (reserva): segredo CLAUDE_CODE_OAUTH_TOKEN, gerado pela
+          #     assinatura Pro/Max com `claude setup-token` (NAO usa a API paga da Anthropic).
+          # Sem nenhuma das duas, o resumo e pulado e o resto roda normal.
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PULAR_GDELT: ${{ github.event.inputs.pular_gdelt == 'true' && '1' || '' }}
           # A SEC exige e-mail de contato no User-Agent (senao da 403). Usa o mesmo
