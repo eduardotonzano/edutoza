@@ -40,9 +40,12 @@ def _chamar_cli(prompt, timeout=TIMEOUT):
     """Roda o Claude Code headless. Retorna (texto_do_modelo, None) ou (None, motivo)."""
     if not shutil.which("claude"):
         return None, "sem-cli"
+    # Apenas geracao de texto (sem ferramentas): --max-turns 1 garante uma unica resposta
+    # e o timeout do subprocess e a rede de seguranca. NAO usamos
+    # --dangerously-skip-permissions: o job roda sozinho sobre noticias de fontes externas,
+    # entao nao concedemos acesso a ferramentas/sistema ao agente.
     cmd = ["claude", "-p", prompt, "--model", MODELO,
-           "--output-format", "json", "--max-turns", "1",
-           "--dangerously-skip-permissions"]
+           "--output-format", "json", "--max-turns", "1"]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
                               env={**os.environ})
