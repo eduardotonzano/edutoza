@@ -2,11 +2,12 @@ name: Monitor de Notícias da Carteira
 
 # Quando rodar:
 on:
-  # 1) Sozinho, TODOS OS DIAS às 17:00 de Brasília (= 20:00 UTC).
-  #    Para mudar o horário, ajuste o número do meio (hora em UTC = BRT + 3).
-  schedule:
-    - cron: "0 20 * * *"
-  # 2) Manualmente, pelo botão "Run workflow" na aba Actions.
+  # GATILHO: um agendador externo (cron-job.org) chama este workflow via API
+  # (workflow_dispatch) as 17:00 de Brasilia, TODOS OS DIAS. Passo a passo em AGENDADOR_17H.md.
+  #
+  # O cron NATIVO do GitHub foi REMOVIDO de proposito: ele atrasava de 20 min a 3h no topo
+  # da hora (o e-mail chegava 20h-21h em vez de 17h). O agendador externo garante o horario.
+  # (Se quiser voltar ao cron do GitHub, reponha:  schedule:\n    - cron: "0 20 * * *")
   workflow_dispatch:
     inputs:
       pular_gdelt:
