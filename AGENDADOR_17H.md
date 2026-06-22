@@ -57,7 +57,28 @@ Se der **401/403**, o token está errado ou sem a permissão **Actions: Read and
 
 ---
 
+## Não chegou às 17h? Como descobrir o porquê
+Há uma **rede de segurança** ativa: o agendamento nativo do GitHub também dispara (alvo 17h,
+mas pode atrasar). Então o e-mail deve chegar de qualquer forma — só que, se o cron-job.org
+não estiver disparando, ele pode vir atrasado. Para consertar o **horário exato**:
+
+1. No cron-job.org, abra o job e veja a aba **"History"** (Histórico de execuções).
+2. Olhe a **última execução** e o **status/código de resposta**:
+   - **204** → funcionou (o GitHub aceitou). Se mesmo assim não chegou e-mail, o problema é
+     outro (me avise) — mas normalmente 204 = ok.
+   - **401 / 403** → problema no **token**: gere de novo um token *fine-grained* com
+     **Repository → Actions: Read and write** no repo `edutoza` (Passo 1) e atualize o header
+     `Authorization`.
+   - **404** → **URL errada**: confira que está exatamente
+     `https://api.github.com/repos/eduardotonzano/edutoza/actions/workflows/monitor.yml/dispatches`.
+   - **vazio / "—" / não executou** → o job está **desativado** ou com **horário/fuso errado**.
+     Confirme que o job está **Enabled**, horário **17:00** e fuso **America/Sao_Paulo**.
+3. Confirme também o **corpo** `{"ref":"main"}` e o método **POST**.
+
+Me diga qual status aparece no History que eu aponto a correção exata.
+
 ## Pronto
-A partir daí, o relatório das **últimas 24 horas** chega todo dia ~**17h02** (Brasília),
-no horário certo. Para mudar o horário, é só editar o agendamento no cron-job.org —
-não precisa mexer no código.
+Com a rede de segurança do GitHub, o relatório das **últimas 24 horas** chega **todo dia**.
+Quando o cron-job.org estiver confirmado (status 204 no History), me avise: eu **removo o
+agendamento do GitHub** para você não receber 2 e-mails por dia e ficar só com o **17h02
+cravado**. Para mudar o horário, edite o agendamento no cron-job.org.

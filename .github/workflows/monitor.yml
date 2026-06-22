@@ -2,12 +2,15 @@ name: Monitor de Notícias da Carteira
 
 # Quando rodar:
 on:
-  # GATILHO: um agendador externo (cron-job.org) chama este workflow via API
-  # (workflow_dispatch) as 17:00 de Brasilia, TODOS OS DIAS. Passo a passo em AGENDADOR_17H.md.
-  #
-  # O cron NATIVO do GitHub foi REMOVIDO de proposito: ele atrasava de 20 min a 3h no topo
-  # da hora (o e-mail chegava 20h-21h em vez de 17h). O agendador externo garante o horario.
-  # (Se quiser voltar ao cron do GitHub, reponha:  schedule:\n    - cron: "0 20 * * *")
+  # 1) BACKUP GARANTIDO: agendamento nativo do GitHub, alvo 17:00 BRT (= 20:00 UTC).
+  #    Atencao: o GitHub pode ATRASAR a fila de 20 min a varias horas (limitacao conhecida);
+  #    serve para garantir que o e-mail SAIA todo dia, mesmo que nao no minuto exato.
+  schedule:
+    - cron: "0 20 * * *"
+  # 2) HORARIO EXATO: um agendador externo (cron-job.org) chama via API (workflow_dispatch)
+  #    as 17:00 BRT cravado. Passo a passo + diagnostico em AGENDADOR_17H.md.
+  #    QUANDO o externo estiver confirmado funcionando, REMOVER o 'schedule:' acima para
+  #    nao enviar 2 e-mails/dia. (Enquanto o externo nao dispara, so o schedule envia.)
   workflow_dispatch:
     inputs:
       pular_gdelt:
