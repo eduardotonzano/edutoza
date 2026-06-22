@@ -129,6 +129,29 @@ FILLER_TITULO = ["invested in","worth this much","years ago would","5 years ago"
     "stocks to buy","motley fool","zacks rank","price target","shares sold","shares bought",
     "shares acquired","stake in","position in","hold rating","buy rating","sell rating",
     "shocking","you should know","reasons to","things to know","what to know"]
+
+# Manchetes de CHAMADA DE ANALISTA / RATING: quando um BANCO aparece no titulo porque ELE
+# esta dando recomendacao/preco-alvo/rating de OUTRA empresa, a noticia e sobre a empresa
+# avaliada, nao sobre o banco -> rejeitada PARA O BANCO (ver validar). Termos PT + EN.
+ANALISTA_TITULO = [
+    # Portugues
+    "preco-alvo", "preco alvo", "recomendacao", "rebaixa", "rebaixou", "rebaixaram",
+    "inicia cobertura", "retoma cobertura", "reitera compra", "reitera venda",
+    "reitera recomendacao", "potencial de valorizacao", "ve potencial", "projeta alta de",
+    "projeta queda", "corta preco", "reduz preco", "eleva preco", "aumenta preco",
+    "elevou o preco", "cortou o preco", "reduziu o preco",
+    # Ingles
+    "price target", "target price", "raises target", "cuts target", "lowers target",
+    "boosts target", "trims target", "raises pt", "cuts pt", "lifts pt", "lowers pt",
+    "downgrade", "downgrades", "downgraded", "upgrade", "upgrades", "upgraded",
+    "initiates coverage", "initiated coverage", "reinstates coverage", "resumes coverage",
+    "outperform", "underperform", "overweight", "underweight", "buy rating", "sell rating",
+    "hold rating", "neutral rating", "equal weight", "market perform", "top pick", "top picks"]
+# Agencias de rating: se o titulo cita uma agencia, quem foi avaliado e o proprio banco
+# (ex.: "Moody's rebaixa o JPMorgan") -> NAO e chamada do banco sobre terceiro -> mantem.
+AGENCIAS_RATING = ["fitch", "moody", "s&p", "s & p", "standard & poor", "austin rating",
+    "lf rating", "dbrs", "sr rating"]
+
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
 # Horario de Brasilia (UTC-3 fixo; o Brasil nao tem horario de verao desde 2019). Todas as
@@ -194,6 +217,16 @@ def _eh_macro(titulo):
     t = norm(titulo)
     return any(m in t for m in MACRO_TITULO) or any(f in t for f in FILLER_TITULO)
 
+def _eh_call_de_research(titulo):
+    """True se o titulo for uma chamada de analista/rating (preco-alvo, upgrade, downgrade,
+    recomendacao...). Se citar uma AGENCIA de rating, retorna False (ai o avaliado e o
+    proprio banco - e noticia legitima dele). Usado para tirar do BANCO as noticias em que
+    ele apenas opina/avalia OUTRA empresa."""
+    t = norm(titulo)
+    if any(a in t for a in AGENCIAS_RATING):
+        return False
+    return any(term in t for term in ANALISTA_TITULO)
+
 def _n_empresas_no_titulo(titulo, empresas):
     """Quantas empresas DIFERENTES da carteira aparecem no titulo (detecta roundup)."""
     if not empresas: return 1
@@ -206,6 +239,12 @@ def validar(titulo, corpo, resumo, cfg, premium=False, empresas=None):
     tl = norm(titulo)
     # 1) A empresa PRECISA estar no titulo (senao e citacao de passagem no corpo).
     if conta(titulo, nomes) == 0:
+        return 0
+    # 1b) Se o emissor e um BANCO e o titulo e uma chamada de analista/rating (preco-alvo,
+    # upgrade/downgrade, recomendacao...), a noticia e sobre a empresa AVALIADA, nao sobre o
+    # banco -> rejeita para o banco. (Quando uma AGENCIA avalia o banco, _eh_call_de_research
+    # devolve False e a noticia do banco e mantida.)
+    if cfg.get("categoria", "").startswith("Banco") and _eh_call_de_research(titulo):
         return 0
     # 2) So nome ambiguo (fraco) no titulo -> exige termo de contexto (titulo+corpo).
     corpo_ok = bool(corpo and len(corpo) >= 200)
