@@ -1,5 +1,10 @@
 # Agendador das 17h (chegar no horário exato)
 
+> **STATUS: EM ESPERA.** A tentativa pelo cron-job.org deu **401** (token recusado pelo
+> GitHub). Por ora o robô usa o **agendamento nativo do GitHub** (cron `50 19 * * *` ≈ 16:50
+> BRT, fora do topo da hora p/ reduzir a fila) — chega todo dia, perto das 17h, mas o GitHub
+> não garante o minuto exato. Este guia continua válido para quando você quiser cravar as 17h.
+
 ## Por que isso existe
 O cron nativo do GitHub Actions **atrasa muito** no topo da hora (o e-mail chegava 20h–21h
 em vez de 17h). A solução é um **agendador externo grátis** (cron-job.org) que chama o robô

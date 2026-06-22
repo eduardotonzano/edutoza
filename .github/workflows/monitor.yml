@@ -2,15 +2,14 @@ name: Monitor de Notícias da Carteira
 
 # Quando rodar:
 on:
-  # 1) BACKUP GARANTIDO: agendamento nativo do GitHub, alvo 17:00 BRT (= 20:00 UTC).
-  #    Atencao: o GitHub pode ATRASAR a fila de 20 min a varias horas (limitacao conhecida);
-  #    serve para garantir que o e-mail SAIA todo dia, mesmo que nao no minuto exato.
+  # AGENDAMENTO (nativo do GitHub) - alvo ~17h BRT. Marcado as 19:50 UTC (16:50 BRT) e num
+  # minuto FORA do topo da hora de proposito: o GitHub atrasa muito mais as :00, entao um
+  # minuto "quebrado" e um pouco antes faz a fila tender a cair perto das 17h.
+  # IMPORTANTE: o GitHub NAO garante o minuto exato (pode variar) - e o melhor possivel sem
+  # depender de servico externo. O gatilho externo (cron-job.org / AGENDADOR_17H.md) esta
+  # EM ESPERA (deu 401 no token); se um dia for ativado, remova este schedule p/ nao duplicar.
   schedule:
-    - cron: "0 20 * * *"
-  # 2) HORARIO EXATO: um agendador externo (cron-job.org) chama via API (workflow_dispatch)
-  #    as 17:00 BRT cravado. Passo a passo + diagnostico em AGENDADOR_17H.md.
-  #    QUANDO o externo estiver confirmado funcionando, REMOVER o 'schedule:' acima para
-  #    nao enviar 2 e-mails/dia. (Enquanto o externo nao dispara, so o schedule envia.)
+    - cron: "50 19 * * *"
   workflow_dispatch:
     inputs:
       pular_gdelt:
