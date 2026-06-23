@@ -102,7 +102,7 @@ def main():
     finais.sort(key=lambda x: (str(x["ticker"]), -x["data_obj"].timestamp()))
     print(f"    {len(finais)} itens apos juntar e deduplicar")
 
-    print("5/6 Resumindo com IA (Gemini + Claude Code/Haiku reserva, 2 analistas)...")
+    print("5/6 Resumindo com IA (Gemini + Claude Code/Haiku reserva; resumo de 1 paragrafo)...")
     if IA_ATIVA:
         preencher_resumos(finais)
     else:

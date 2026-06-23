@@ -45,15 +45,15 @@ def gerar_excel(alvos, noticias_finais, caminho=None):
     # ---- Aba 1: NOTICIAS ----
     ws1 = wb.active; ws1.title = "NOTICIAS"
     _cab(ws1, ["DATA","TICKER","EMISSOR","TITULO","FONTE","LINK","REL",
-               "RESUMO","ANALISTA OTIMISTA","ANALISTA CETICO","IMPACTO"],
-         [15,12,22,52,18,40,6,42,42,42,18])
+               "RESUMO","IMPACTO"],
+         [15,12,22,52,18,40,6,70,20])
     ta=None; grp=True
     for i, n in enumerate(noticias_finais, 2):
         if n["ticker"] != ta: grp = not grp; ta = n["ticker"]
         fill = _FA if grp else _FB
         for c, v in enumerate([n["data"],n["ticker"],n["nome"],n["titulo"],n["fonte"],
                                n["link"],n["relevancia"],n.get("resumo_ia",""),
-                               n.get("otimista",""),n.get("cetico",""),n.get("impacto","")], 1):
+                               n.get("impacto","")], 1):
             x = ws1.cell(row=i, column=c, value=v)
             x.font=Font(name="Arial",size=10); x.fill=fill; x.border=_BD; x.alignment=_LFT
         if n["link"]:

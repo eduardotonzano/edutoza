@@ -1,4 +1,4 @@
-"""Resumo de IA com DOIS analistas (otimista x cetico) por noticia.
+"""Resumo de IA: um RESUMO da propria noticia em 1 paragrafo (+ etiqueta de impacto).
 
 Coordenador de dois backends GRATUITOS (nada de API paga):
   - Google Gemini (aqui) = PRINCIPAL, se GEMINI_API_KEY existir (gratuito).
@@ -9,8 +9,8 @@ Funciona em 2 passes: 1) Gemini por item (em paralelo) ate a cota gratuita estou
 2) Claude Code/Haiku EM LOTES cobre o que sobrou. A etapa toda e limitada por tempo
 (IA_BUDGET). O que nao for resumido usa o titulo no PDF.
 
-Saida (4 campos): resumo (fato neutro), otimista (analista bull), cetico (analista bear),
-impacto (Positivo/Negativo/Neutro + justificativa).
+Saida (2 campos): resumo (1 paragrafo com os fatos da noticia, sem opiniao) e
+impacto (Positivo/Negativo/Neutro + meia frase).
 """
 
 import os, json, time, threading, requests
@@ -23,9 +23,8 @@ MODELOS = ["gemini-2.5-flash-lite", "gemini-2.0-flash-lite", "gemini-2.5-flash",
            "gemini-flash-latest", "gemini-2.0-flash"]
 _URL = "https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent"
 _SCHEMA = {"type": "object", "properties": {
-    "resumo": {"type": "string"}, "otimista": {"type": "string"},
-    "cetico": {"type": "string"}, "impacto": {"type": "string"}},
-    "required": ["resumo", "otimista", "cetico", "impacto"]}
+    "resumo": {"type": "string"}, "impacto": {"type": "string"}},
+    "required": ["resumo", "impacto"]}
 
 WORKERS = 2
 TIMEOUT = 30
@@ -39,12 +38,11 @@ ATIVADO = bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("CLAUDE_CODE_O
 
 
 def _prompt(nome, titulo, texto):
-    return (f"Empresa: {nome}.\nNOTICIA:\nTITULO: {titulo}\nTEXTO: {texto}\n\n"
+    return (f"Empresa/ativo: {nome}.\nNOTICIA:\nTITULO: {titulo}\nTEXTO: {texto}\n\n"
             "Responda em portugues, SOMENTE com um JSON com estas chaves exatas:\n"
-            '- "resumo": 1 frase neutra com o fato principal (sem opiniao).\n'
-            '- "otimista": parecer de um analista OTIMISTA sobre a tese de investimento '
-            f'em {nome} (por que e bom), 1 frase.\n'
-            '- "cetico": parecer de um analista CETICO (riscos/contraponto), 1 frase.\n'
+            '- "resumo": um RESUMO da propria noticia, em 1 paragrafo (3 a 5 frases), com os '
+            "fatos principais (o que aconteceu, numeros, contexto). Apenas os fatos, sem "
+            "opiniao, sem analise, sem recomendacao.\n"
             '- "impacto": comece com Positivo, Negativo ou Neutro, + meia frase de justificativa.')
 
 
@@ -56,20 +54,17 @@ def _prompt_lote(itens):
         blocos.append(f"--- NOTICIA {i} ---\nEMPRESA: {n['nome']}\n"
                       f"TITULO: {n['titulo']}\nTEXTO: {texto}")
     corpo = "\n\n".join(blocos)
-    return ("Voce e uma mesa de research buy-side com dois analistas. Abaixo ha "
-            f"{len(itens)} noticias.\n\n{corpo}\n\n"
+    return (f"Abaixo ha {len(itens)} noticias.\n\n{corpo}\n\n"
             "Responda em portugues, SOMENTE com um JSON valido (sem texto fora dele) neste "
-            'formato:\n{"itens": [{"resumo": "...", "otimista": "...", "cetico": "...", '
-            '"impacto": "..."}]}\n'
+            'formato:\n{"itens": [{"resumo": "...", "impacto": "..."}]}\n'
             f"A lista deve ter EXATAMENTE {len(itens)} objetos, NA MESMA ORDEM das noticias. "
-            'Em cada objeto: "resumo"=1 frase neutra do fato (sem opiniao); '
-            '"otimista"=parecer de analista bull (1 frase); "cetico"=parecer de analista '
-            'bear/riscos (1 frase); "impacto"=comece com Positivo, Negativo ou Neutro + '
-            "meia frase de justificativa.")
+            'Em cada objeto: "resumo"=um resumo da propria noticia em 1 paragrafo (3 a 5 '
+            "frases) com os fatos principais, apenas os fatos, sem opiniao/analise; "
+            '"impacto"=comece com Positivo, Negativo ou Neutro + meia frase de justificativa.')
 
 
 def _resumir_gemini(chave, nome, titulo, corpo):
-    """Tenta cada modelo Gemini uma vez. Retorna (fields4, 200) ou (None, status)."""
+    """Tenta cada modelo Gemini. Retorna ((resumo, impacto), 200) ou (None, status)."""
     texto = (corpo or "").strip()[:3000] or titulo
     body = {"contents": [{"parts": [{"text": _prompt(nome, titulo, texto)}]}],
             "generationConfig": {"responseMimeType": "application/json", "responseSchema": _SCHEMA,
@@ -84,8 +79,8 @@ def _resumir_gemini(chave, nome, titulo, corpo):
                 if r.status_code == 200:
                     cand = r.json()["candidates"][0]["content"]["parts"][0]["text"]
                     d = json.loads(cand)
-                    return ((d.get("resumo", "") or "").strip(), (d.get("otimista", "") or "").strip(),
-                            (d.get("cetico", "") or "").strip(), (d.get("impacto", "") or "").strip()), 200
+                    return ((d.get("resumo", "") or "").strip(),
+                            (d.get("impacto", "") or "").strip()), 200
                 ultimo = r.status_code
                 if r.status_code == 429 and tentativa == 0:
                     time.sleep(2)               # backoff e tenta o mesmo modelo 1x
@@ -120,7 +115,7 @@ def _passe_gemini(finais, chave, t0):
             n, f, st = fut.result()
             with trava:
                 if f:
-                    n["resumo_ia"], n["otimista"], n["cetico"], n["impacto"] = f
+                    n["resumo_ia"], n["impacto"] = f
                     feitos["n"] += 1
                     falhas["n"] = 0
                 elif st is not None:
@@ -160,7 +155,7 @@ def _passe_claude(finais, t0):
         falhas = 0
         for n, campos in zip(lote, res):
             if campos and campos[0]:
-                n["resumo_ia"], n["otimista"], n["cetico"], n["impacto"] = campos
+                n["resumo_ia"], n["impacto"] = campos
                 feitos += 1
     return feitos
 
