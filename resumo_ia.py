@@ -32,6 +32,8 @@ TIMEOUT = 30
 IA_BUDGET = 420                # teto de tempo (s) p/ a etapa inteira (Gemini + Claude Code)
 MAX_FALHAS = 8                 # falhas seguidas do Gemini -> passa p/ a reserva
 LOTE_CLAUDE = 6                # noticias por chamada do CLI do Claude Code
+LIMITE_HAIKU = 40              # teto de noticias/dia resumidas pelo Haiku (poupa a assinatura)
+PAUSA_GEMINI = 0.5             # s entre chamadas do Gemini (respeita o limite do plano gratis)
 
 ATIVADO = bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"))
 
@@ -74,16 +76,26 @@ def _resumir_gemini(chave, nome, titulo, corpo):
                                  "maxOutputTokens": 2048, "temperature": 0.2}}
     ultimo = "?"
     for modelo in MODELOS:
-        try:
-            r = requests.post(_URL.format(m=modelo), params={"key": chave}, json=body, timeout=TIMEOUT)
-            if r.status_code == 200:
-                cand = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-                d = json.loads(cand)
-                return ((d.get("resumo", "") or "").strip(), (d.get("otimista", "") or "").strip(),
-                        (d.get("cetico", "") or "").strip(), (d.get("impacto", "") or "").strip()), 200
-            ultimo = r.status_code
-        except Exception as e:
-            ultimo = str(e)[:30]
+        # Ate 2 tentativas por modelo: em 429 (limite de taxa) ou erro de conexao, espera e
+        # tenta de novo antes de pular para o proximo modelo (aproveita melhor a cota gratis).
+        for tentativa in range(2):
+            try:
+                r = requests.post(_URL.format(m=modelo), params={"key": chave}, json=body, timeout=TIMEOUT)
+                if r.status_code == 200:
+                    cand = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+                    d = json.loads(cand)
+                    return ((d.get("resumo", "") or "").strip(), (d.get("otimista", "") or "").strip(),
+                            (d.get("cetico", "") or "").strip(), (d.get("impacto", "") or "").strip()), 200
+                ultimo = r.status_code
+                if r.status_code == 429 and tentativa == 0:
+                    time.sleep(2)               # backoff e tenta o mesmo modelo 1x
+                    continue
+                break                            # outro erro -> proximo modelo
+            except Exception as e:
+                ultimo = str(e)[:30]
+                if tentativa == 0:
+                    time.sleep(1)
+                    continue
     return None, ultimo
 
 
@@ -98,6 +110,7 @@ def _passe_gemini(finais, chave, t0):
     def tarefa(n):
         if parar.is_set():
             return n, None, None
+        time.sleep(PAUSA_GEMINI)   # ritmo: evita rajada que dispara 429 no plano gratis
         f, st = _resumir_gemini(chave, n["nome"], n["titulo"], n.get("corpo", ""))
         return n, f, st
 
@@ -125,6 +138,12 @@ def _passe_claude(finais, t0):
     pendentes = [n for n in finais if not n.get("resumo_ia")]
     if not pendentes:
         return 0
+    # Teto diario: o Haiku roda pela assinatura Pro/Max (cota semanal); limita quantas
+    # noticias ele cobre por dia para nao pesar. O que passar do teto fica sem resumo de IA
+    # (no PDF cai para o proprio titulo).
+    if len(pendentes) > LIMITE_HAIKU:
+        print(f"  IA: Claude Code limitado a {LIMITE_HAIKU}/{len(pendentes)} pendentes (teto diario)")
+        pendentes = pendentes[:LIMITE_HAIKU]
     feitos = falhas = 0
     for i in range(0, len(pendentes), LOTE_CLAUDE):
         if time.time() - t0 > IA_BUDGET:

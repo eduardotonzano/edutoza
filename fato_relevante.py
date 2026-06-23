@@ -8,14 +8,19 @@ Cobertura: empresas BR da carteira (acoes + emissores de bonds/debentures/CDB/CR
 Emissores estrangeiros (US Govt, Citi, Oracle, etc.) sao tratados na etapa da SEC.
 """
 
-import csv, io, zipfile, unicodedata, requests
+import csv, io, zipfile, time, unicodedata, requests
 from datetime import datetime, timezone, timedelta
 from coleta import fmt_brt
 
 JANELA_HORAS = 24
 # (connect, read): a CVM as vezes nao responde a partir de IPs de datacenter (GitHub).
-# Timeout curto para nao travar o run quando o host estiver inacessivel.
-TIMEOUT = (8, 20)
+# Timeout um pouco folgado p/ a leitura do arquivo grande, mas sem travar o run.
+TIMEOUT = (8, 30)
+TENTATIVAS = 3          # tentativas por URL (a CVM costuma recusar 1a conexao do datacenter)
+BACKOFF = (2, 4)        # esperas (s) entre tentativas
+# A CVM recusa requisicao sem User-Agent a partir de datacenter; um UA de navegador ajuda.
+HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+           "Accept": "text/csv,application/zip,*/*"}
 _ANO = datetime.now().year
 _BASE = "https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/IPE/DADOS"
 # A CVM serve esse dataset como .zip (com o .csv dentro). Tentamos .zip e .csv por robustez.
@@ -107,13 +112,22 @@ def buscar_fatos_relevantes(emissores=None):
     limite = datetime.now(timezone.utc) - timedelta(hours=JANELA_HORAS)
     texto = None
     for url in IPE_URLS:
-        try:
-            r = requests.get(url, timeout=TIMEOUT)
-        except Exception as e:
-            print(f"  CVM erro de rede ({url.rsplit('/', 1)[-1]}): {str(e)[:60]}")
-            continue
-        if r.status_code != 200 or not r.content:
-            print(f"  CVM HTTP {r.status_code} ({url.rsplit('/', 1)[-1]})")
+        nome_arq = url.rsplit('/', 1)[-1]
+        r = None
+        # Varias tentativas: a CVM costuma recusar a 1a conexao a partir do datacenter do
+        # GitHub; repetir com espera resolve na maioria dos dias.
+        for t in range(TENTATIVAS):
+            try:
+                r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+                if r.status_code == 200 and r.content:
+                    break
+                print(f"  CVM HTTP {r.status_code} ({nome_arq}) tentativa {t+1}/{TENTATIVAS}")
+            except Exception as e:
+                print(f"  CVM erro de rede ({nome_arq}) tentativa {t+1}/{TENTATIVAS}: {str(e)[:50]}")
+                r = None
+            if t < TENTATIVAS - 1:
+                time.sleep(BACKOFF[min(t, len(BACKOFF) - 1)])
+        if r is None or r.status_code != 200 or not r.content:
             continue
         try:
             if url.endswith(".zip"):

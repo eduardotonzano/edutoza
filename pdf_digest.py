@@ -64,13 +64,24 @@ def gerar_pdf(finais, caminho="Principais_Noticias_24h.pdf"):
         doc.build(fluxo)
         return caminho
 
-    # Agrupa por emissor preservando a ordem de entrada (ja vem ordenado por ticker/data).
+    # Prioridade por IMPACTO: noticias Positivo/Negativo (e maior relevancia) vem primeiro;
+    # Neutro/sem-impacto depois. Assim o que mexe com a tese aparece no topo do documento.
+    def _prio(n):
+        imp = (n.get("impacto") or "").strip().lower()
+        rank = 0 if imp.startswith(("positiv", "negativ")) else (1 if imp else 2)
+        return (rank, -int(n.get("relevancia") or 0))
+
+    # Agrupa por emissor; ordena os itens de cada emissor por impacto e os GRUPOS pelo
+    # melhor item (emissor com noticia de maior impacto aparece antes).
     grupos, ordem = {}, []
     for n in finais:
         k = n["nome"]
         if k not in grupos:
             grupos[k] = []; ordem.append(k)
         grupos[k].append(n)
+    for k in grupos:
+        grupos[k].sort(key=_prio)
+    ordem.sort(key=lambda k: _prio(grupos[k][0]))
 
     for nome in ordem:
         itens = grupos[nome]
