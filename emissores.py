@@ -185,29 +185,30 @@ for _tk, _nome, _alias in _FIIS:
 _GEST_CTX = ["fundo", "fundos", "gestora", "gestao de recursos", "asset", "asset management",
              "multimercado", "cotas", "patrimonio", "investidores"]
 _GESTORAS = [
-    # (nome, [aliases que casam o nome do fundo no ativo])
-    ("Absolute Investimentos", ["absolute"]),
-    ("Kapitalo", ["kapitalo"]),
-    ("ASA Investments", ["asa hedge"]),
-    ("Ibiuna Investimentos", ["ibiuna"]),
-    ("Kinea Investimentos", ["kinea atlas", "kinea andes"]),
-    ("Quantitas", ["quantitas"]),
-    ("Vinland Capital", ["vinland"]),
-    ("Hashdex", ["hashdex"]),
-    ("ARX Investimentos", ["arx fuji"]),
-    ("AZ Quest", ["az quest"]),
-    ("Sparta", ["sparta max"]),
-    ("Western Asset", ["western asset"]),
-    ("Real Investor", ["real investor"]),
-    ("Solis Investimentos", ["solis capital"]),
-    ("Planner", ["planner fundo"]),
-    ("Porto Seguro", ["porto seguro fundo"]),
-    ("SulAmerica Investimentos", ["sul america prev"]),
-    ("XP Asset", ["xp referenciado", "xp credito estruturado"]),
+    # (nome, [aliases que casam o nome do fundo no ativo], site de RI/noticias - best-effort)
+    ("Absolute Investimentos", ["absolute"], "https://www.absoluteinvest.com.br/"),
+    ("Kapitalo", ["kapitalo"], "https://www.kapitalo.com.br/"),
+    ("ASA Investments", ["asa hedge"], "https://asain.com.br/"),
+    ("Ibiuna Investimentos", ["ibiuna"], "https://www.ibiunainvest.com.br/"),
+    ("Kinea Investimentos", ["kinea atlas", "kinea andes"], "https://www.kinea.com.br/"),
+    ("Quantitas", ["quantitas"], "https://www.quantitas.com.br/"),
+    ("Vinland Capital", ["vinland"], "https://www.vinlandcapital.com.br/"),
+    ("Hashdex", ["hashdex"], "https://hashdex.com.br/"),
+    ("ARX Investimentos", ["arx fuji"], "https://www.arxinvestimentos.com.br/"),
+    ("AZ Quest", ["az quest"], "https://www.azquest.com.br/"),
+    ("Sparta", ["sparta max"], "https://www.sparta.com.br/"),
+    ("Western Asset", ["western asset"], "https://www.westernasset.com.br/"),
+    ("Real Investor", ["real investor"], "https://realinvestor.com.br/"),
+    ("Solis Investimentos", ["solis capital"], "https://www.solisinvestimentos.com.br/"),
+    ("Planner", ["planner fundo"], "https://www.planner.com.br/"),
+    ("Porto Seguro", ["porto seguro fundo"], "https://www.portoseguro.com.br/ri"),
+    ("SulAmerica Investimentos", ["sul america prev"], "https://ri.sulamerica.com.br/"),
+    ("XP Asset", ["xp referenciado", "xp credito estruturado"], "https://www.xpasset.com.br/"),
 ]
-for _nome, _aliases in _GESTORAS:
-    _EXTRA[f"Gestora {_nome}"] = _e(_nome, busca=f"{_nome} gestora fundos",
-        forte=[_nome], contexto=_GEST_CTX, aliases=_aliases, categoria="Gestora")
+for _nome, _aliases, _ri in _GESTORAS:
+    _EXTRA[f"Gestora {_nome}"] = {**_e(_nome, busca=f"{_nome} gestora fundos",
+        forte=[_nome], contexto=_GEST_CTX, aliases=_aliases, categoria="Gestora",
+        ri_url=_ri)}
 
 
 def _campos_acao(nome):

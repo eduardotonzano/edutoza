@@ -1,0 +1,71 @@
+name: Alerta de Fundos (intraday)
+
+# ALERTA quase em tempo real (separado do relatorio das 17h). Vigia Fundos.NET (CVM/B3) e o
+# RI das gestoras; quando sai algo novo de um FII/FIDC/gestora da base, manda e-mail NA HORA.
+on:
+  # A cada 30 min (melhor esforco do GitHub - pode variar). Para 15 min cravado, aponte um
+  # agendador externo (cron-job.org) para o workflow_dispatch abaixo.
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+# Evita rodar duas instancias ao mesmo tempo (o estado e compartilhado via cache).
+concurrency:
+  group: alerta-fundos
+  cancel-in-progress: false
+
+jobs:
+  alertar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      # Estado (o que ja foi avisado) persistido entre execucoes via cache. Cada run salva
+      # uma chave nova e restaura a mais recente pelo prefixo.
+      - name: Restaurar estado de alertas
+        uses: actions/cache@v4
+        with:
+          path: alertas_estado.json
+          key: alerta-estado-${{ github.run_id }}
+          restore-keys: |
+            alerta-estado-
+
+      - name: Rodar o alerta
+        id: run
+        env:
+          ALERTA_JANELA_MIN: "90"
+        run: python -u alerta.py
+
+      - name: Preparar corpo do e-mail
+        id: corpo
+        if: steps.run.outputs.novos != '0' && steps.run.outputs.novos != ''
+        run: |
+          echo "html<<EOF" >> "$GITHUB_OUTPUT"
+          cat alerta_corpo.html >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Enviar alerta por e-mail
+        if: ${{ steps.run.outputs.novos != '0' && steps.run.outputs.novos != '' && env.MAIL_USERNAME != '' && env.MAIL_PASSWORD != '' }}
+        env:
+          MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "Alerta de Fundos - ${{ steps.run.outputs.novos }} novidade(s)"
+          to: eduardotonzano@gmail.com
+          from: Monitor de Notícias <${{ secrets.MAIL_USERNAME }}>
+          html_body: ${{ steps.corpo.outputs.html }}
