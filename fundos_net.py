@@ -13,14 +13,15 @@ import time, requests, unicodedata
 from datetime import datetime, timezone, timedelta
 
 URL = "https://fnet.bmfbovespa.com.br/fnet/publico/pesquisarGerenciadorDocumentosDados"
+WARMUP = "https://fnet.bmfbovespa.com.br/fnet/publico/abrirGerenciadorDocumentosCVM"
 DOC = "https://fnet.bmfbovespa.com.br/fnet/publico/exibirDocumento?id={id}&cvm=true"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
            "Accept": "application/json, text/javascript, */*; q=0.01",
            "X-Requested-With": "XMLHttpRequest",
            "Referer": "https://fnet.bmfbovespa.com.br/fnet/publico/abrirGerenciadorDocumentosCVM"}
-TIMEOUT = (8, 30)
-TENTATIVAS = 3
-BACKOFF = (2, 4)
+TIMEOUT = (8, 20)
+TENTATIVAS = 2
+BACKOFF = (3,)
 BRT = timezone(timedelta(hours=-3))
 # tipoFundo no fnet: 1 = FII, 2 = FIDC (cobre os dois tipos que monitoramos).
 TIPOS = {"1": "FII", "2": "FIDC"}
@@ -47,6 +48,14 @@ def buscar_fnet(tokens, janela_min=90, paginas=2, por_pagina=100):
     fundo contenha algum token. Falha -> []."""
     limite = datetime.now(timezone.utc) - timedelta(minutes=janela_min)
     itens, vistos = [], set()
+    # O fnet costuma exigir uma SESSAO (cookie JSESSIONID) iniciada na pagina do gerenciador
+    # antes de responder a consulta de dados. Aquece a sessao com um GET na pagina publica.
+    sess = requests.Session()
+    sess.headers.update(HEADERS)
+    try:
+        sess.get(WARMUP, timeout=TIMEOUT)
+    except Exception as e:
+        print(f"  fnet warmup falhou (seguindo): {str(e)[:50]}")
     for tipo, rotulo_tipo in TIPOS.items():
         for p in range(paginas):
             params = {"d": 1, "s": p * por_pagina, "l": por_pagina,
@@ -54,7 +63,7 @@ def buscar_fnet(tokens, janela_min=90, paginas=2, por_pagina=100):
             linhas = None
             for tent in range(TENTATIVAS):
                 try:
-                    r = requests.get(URL, params=params, headers=HEADERS, timeout=TIMEOUT)
+                    r = sess.get(URL, params=params, timeout=TIMEOUT)
                     if r.status_code == 200 and r.text.strip():
                         linhas = r.json().get("data", []) or []
                         break
