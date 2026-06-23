@@ -140,6 +140,75 @@ _EXTRA = {
  "Tesouro":       _e("Tesouro Nacional / BACEN", news_applicable=False, categoria="Governo BR", aliases=["bacen","tesouro nacional"]),
 }
 
+# ----------------------------------------------------------------------------
+# FIIs (fundos imobiliarios) - monitorados POR TICKER (XXXX11). O alias casa o nome
+# embaralhado do ativo na base; forte = [ticker, nome] (a noticia de FII costuma trazer o
+# ticker no titulo). ticker XXXX11 -> Yahoo (XXXX11.SA) + Google News por ticker.
+# Os marcados "(confirmar)" sao melhor-palpite do ticker; se estiver errado, apenas nao casa
+# noticia (nao gera falso positivo) - o dono confirma depois.
+# ----------------------------------------------------------------------------
+_FII_CTX = ["fii", "fundo imobiliario", "fundos imobiliarios", "rendimento", "dividendo",
+            "cota", "cotas", "imovel", "imoveis", "cri", "logistica", "shopping", "lajes",
+            "galpao", "vacancia", "aquisicao", "locacao"]
+_FIIS = [
+    # (ticker, nome, alias_no_ativo)
+    ("XPML11", "XP Malls", "xp malls"),
+    ("XPLG11", "XP Log", "xp log"),
+    ("XPCI11", "XP Credito Imobiliario", "xp cred"),
+    ("HGCR11", "CSHG Recebiveis", "hgcr"),
+    ("KNSC11", "Kinea Securities", "kinea sc"),
+    ("LVBI11", "VBI Logistica", "lvbi"),
+    ("PVBI11", "VBI Prime Properties", "pvbi"),
+    ("BROF11", "BTG Corporate Office", "brof"),
+    ("GGRC11", "GGR Covepi Renda", "ggrcovep"),
+    ("TGAR11", "TG Ativo Real", "tg ativo"),
+    ("TRXF11", "TRX Real Estate", "trx real"),
+    ("SAPI11", "FII SAPI11", "sapi11"),
+    # melhor-palpite (confirmar o ticker):
+    ("VISC11", "Vinci Shopping Centers", "vinci sc"),
+    ("RZTR11", "Riza Terrax", "riza tx"),
+    ("GARE11", "Guardian Real Estate", "guardian"),
+    ("VGIP11", "Valora CRI IPCA", "valoraip"),
+    ("RBRR11", "RBR Rendimento High Grade", "rbr pcri"),
+]
+for _tk, _nome, _alias in _FIIS:
+    _EXTRA[f"FII {_tk}"] = {**_e(f"{_nome} ({_tk})", busca=f"{_nome} fundo imobiliario",
+        forte=[_tk, _nome], contexto=_FII_CTX, aliases=[_alias], categoria="FII"),
+        "ticker": _tk}
+
+# ----------------------------------------------------------------------------
+# GESTORAS de fundos (multimercado / RF / FIDC) - monitoradas pelo NOME da gestora. Noticia
+# por fundo praticamente nao existe; a noticia relevante e da casa (M&A, saida de socio,
+# fechamento de fundo, problema regulatorio). Aplica-se o MESMO filtro anti-opiniao dos
+# bancos (categoria "Gestora" em coleta.validar) p/ nao entrar "o que a gestora acha".
+# ----------------------------------------------------------------------------
+_GEST_CTX = ["fundo", "fundos", "gestora", "gestao de recursos", "asset", "asset management",
+             "multimercado", "cotas", "patrimonio", "investidores"]
+_GESTORAS = [
+    # (nome, [aliases que casam o nome do fundo no ativo])
+    ("Absolute Investimentos", ["absolute"]),
+    ("Kapitalo", ["kapitalo"]),
+    ("ASA Investments", ["asa hedge"]),
+    ("Ibiuna Investimentos", ["ibiuna"]),
+    ("Kinea Investimentos", ["kinea atlas", "kinea andes"]),
+    ("Quantitas", ["quantitas"]),
+    ("Vinland Capital", ["vinland"]),
+    ("Hashdex", ["hashdex"]),
+    ("ARX Investimentos", ["arx fuji"]),
+    ("AZ Quest", ["az quest"]),
+    ("Sparta", ["sparta max"]),
+    ("Western Asset", ["western asset"]),
+    ("Real Investor", ["real investor"]),
+    ("Solis Investimentos", ["solis capital"]),
+    ("Planner", ["planner fundo"]),
+    ("Porto Seguro", ["porto seguro fundo"]),
+    ("SulAmerica Investimentos", ["sul america prev"]),
+    ("XP Asset", ["xp referenciado", "xp credito estruturado"]),
+]
+for _nome, _aliases in _GESTORAS:
+    _EXTRA[f"Gestora {_nome}"] = _e(_nome, busca=f"{_nome} gestora fundos",
+        forte=[_nome], contexto=_GEST_CTX, aliases=_aliases, categoria="Gestora")
+
 
 def _campos_acao(nome):
     cfg = EMPRESAS[nome]

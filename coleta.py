@@ -277,7 +277,10 @@ def validar(titulo, corpo, resumo, cfg, premium=False, empresas=None):
     # upgrade/downgrade, recomendacao...), a noticia e sobre a empresa AVALIADA, nao sobre o
     # banco -> rejeita para o banco. (Quando uma AGENCIA avalia o banco, _eh_call_de_research
     # devolve False e a noticia do banco e mantida.)
-    if cfg.get("categoria", "").startswith("Banco") and _ruido_banco(titulo):
+    # 1b) BANCOS e GESTORAS: tira chamada de analista/rating, opiniao/projecao e movimentacao
+    # de pessoas de cargo nao-altissimo (a noticia que importa e o fato corporativo da casa).
+    cat = cfg.get("categoria", "")
+    if (cat.startswith("Banco") or cat == "Gestora") and _ruido_banco(titulo):
         return 0
     # 2) So nome ambiguo (fraco) no titulo -> exige termo de contexto (titulo+corpo).
     corpo_ok = bool(corpo and len(corpo) >= 200)
