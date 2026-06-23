@@ -9,15 +9,18 @@ filtra os das ultimas `janela_min` e casa o nome do fundo (descricaoFundo) com o
 nossa base (FIIs do registro + FIDCs da carteira). Sem CNPJ: casa por nome.
 """
 
-import requests, unicodedata
+import time, requests, unicodedata
 from datetime import datetime, timezone, timedelta
 
 URL = "https://fnet.bmfbovespa.com.br/fnet/publico/pesquisarGerenciadorDocumentosDados"
 DOC = "https://fnet.bmfbovespa.com.br/fnet/publico/exibirDocumento?id={id}&cvm=true"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
            "Accept": "application/json, text/javascript, */*; q=0.01",
-           "X-Requested-With": "XMLHttpRequest"}
-TIMEOUT = 20
+           "X-Requested-With": "XMLHttpRequest",
+           "Referer": "https://fnet.bmfbovespa.com.br/fnet/publico/abrirGerenciadorDocumentosCVM"}
+TIMEOUT = (8, 30)
+TENTATIVAS = 3
+BACKOFF = (2, 4)
 BRT = timezone(timedelta(hours=-3))
 # tipoFundo no fnet: 1 = FII, 2 = FIDC (cobre os dois tipos que monitoramos).
 TIPOS = {"1": "FII", "2": "FIDC"}
@@ -48,13 +51,19 @@ def buscar_fnet(tokens, janela_min=90, paginas=2, por_pagina=100):
         for p in range(paginas):
             params = {"d": 1, "s": p * por_pagina, "l": por_pagina,
                       "o[0][dataEntrega]": "desc", "tipoFundo": tipo}
-            try:
-                r = requests.get(URL, params=params, headers=HEADERS, timeout=TIMEOUT)
-                if r.status_code != 200 or not r.text.strip():
-                    continue
-                linhas = r.json().get("data", []) or []
-            except Exception as e:
-                print(f"  fnet erro ({rotulo_tipo} p{p}): {str(e)[:50]}")
+            linhas = None
+            for tent in range(TENTATIVAS):
+                try:
+                    r = requests.get(URL, params=params, headers=HEADERS, timeout=TIMEOUT)
+                    if r.status_code == 200 and r.text.strip():
+                        linhas = r.json().get("data", []) or []
+                        break
+                    print(f"  fnet HTTP {r.status_code} ({rotulo_tipo} p{p}) tent {tent+1}/{TENTATIVAS}")
+                except Exception as e:
+                    print(f"  fnet erro ({rotulo_tipo} p{p}) tent {tent+1}/{TENTATIVAS}: {str(e)[:50]}")
+                if tent < TENTATIVAS - 1:
+                    time.sleep(BACKOFF[min(tent, len(BACKOFF) - 1)])
+            if linhas is None:
                 continue
             if not linhas:
                 continue
