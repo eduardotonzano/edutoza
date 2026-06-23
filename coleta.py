@@ -158,6 +158,21 @@ ANALISTA_TITULO = [
 # (ex.: "Moody's rebaixa o JPMorgan") -> NAO e chamada do banco sobre terceiro -> mantem.
 AGENCIAS_RATING = ["fitch", "moody", "s&p", "s & p", "standard & poor", "austin rating",
     "lf rating", "dbrs", "sr rating"]
+# OPINIAO/PROJECAO/ANALISE do banco (o que o banco "acha"/preve sobre terceiros ou cenario):
+# nao e fato do proprio banco -> fora do relatorio. Casado por PALAVRA (conta) por causa de
+# termos curtos como "ve" (de "ve/preve"). "eyes"/"weighs" ficam de FORA (sao estrategia do
+# proprio banco, ex.: "JPMorgan eyes expansion").
+OPINIAO_BANCO = ["ve", "preve", "projeta", "espera", "estima", "acredita", "aposta", "alerta",
+    "recomenda", "comenta", "analisa", "sees", "says", "said", "expects", "forecasts",
+    "forecast", "predicts", "warns", "picks", "optimistic", "bullish", "bearish"]
+# MOVIMENTACAO DE PESSOAS: noticia de quem entrou/saiu so vale se for cargo ALTISSIMO
+# (TOP_ROLE). Caso contrario (diretor, head de area, etc.) -> fora.
+MOV_EXEC = ["ex-", "deixa o", "deixa a", "renuncia", "assume como", "assume a", "nomeia",
+    "elege", "contrata", "promove", "novo diretor", "nova diretora", "head of", "new head",
+    "appoints", "appointment", "hires", "joins as", "steps down", "to leave", "departs",
+    "departure", "executive changes", "saida de"]
+TOP_ROLE = ["ceo", "presidente", "president", "chairman", "chief executive", "fundador",
+    "founder", "diretor-presidente", "diretor presidente"]
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
@@ -224,15 +239,26 @@ def _eh_macro(titulo):
     t = norm(titulo)
     return any(m in t for m in MACRO_TITULO) or any(f in t for f in FILLER_TITULO)
 
-def _eh_call_de_research(titulo):
-    """True se o titulo for uma chamada de analista/rating (preco-alvo, upgrade, downgrade,
-    recomendacao...). Se citar uma AGENCIA de rating, retorna False (ai o avaliado e o
-    proprio banco - e noticia legitima dele). Usado para tirar do BANCO as noticias em que
-    ele apenas opina/avalia OUTRA empresa."""
+def _ruido_banco(titulo):
+    """True se a noticia de um BANCO for RUIDO que nao deve entrar no relatorio:
+      1) chamada de analista/rating (preco-alvo, upgrade/downgrade, recomendacao...);
+      2) opiniao/projecao/analise do banco sobre terceiros ou cenario (o que o banco "acha");
+      3) movimentacao de pessoas que NAO seja cargo altissimo (CEO/presidente/chairman...).
+    Excecao: se o titulo cita uma AGENCIA de rating, quem foi avaliado e o proprio banco ->
+    e noticia legitima dele -> mantem (False)."""
     t = norm(titulo)
     if any(a in t for a in AGENCIAS_RATING):
         return False
-    return any(term in t for term in ANALISTA_TITULO)
+    # 1) chamada de analista / rating
+    if any(term in t for term in ANALISTA_TITULO):
+        return True
+    # 2) opiniao / projecao / analise (casado por palavra)
+    if conta(titulo, OPINIAO_BANCO) > 0:
+        return True
+    # 3) entrada/saida de executivo: so passa se houver cargo altissimo no titulo
+    if any(m in t for m in MOV_EXEC) and conta(titulo, TOP_ROLE) == 0:
+        return True
+    return False
 
 def _n_empresas_no_titulo(titulo, empresas):
     """Quantas empresas DIFERENTES da carteira aparecem no titulo (detecta roundup)."""
@@ -251,7 +277,7 @@ def validar(titulo, corpo, resumo, cfg, premium=False, empresas=None):
     # upgrade/downgrade, recomendacao...), a noticia e sobre a empresa AVALIADA, nao sobre o
     # banco -> rejeita para o banco. (Quando uma AGENCIA avalia o banco, _eh_call_de_research
     # devolve False e a noticia do banco e mantida.)
-    if cfg.get("categoria", "").startswith("Banco") and _eh_call_de_research(titulo):
+    if cfg.get("categoria", "").startswith("Banco") and _ruido_banco(titulo):
         return 0
     # 2) So nome ambiguo (fraco) no titulo -> exige termo de contexto (titulo+corpo).
     corpo_ok = bool(corpo and len(corpo) >= 200)
