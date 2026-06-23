@@ -150,7 +150,10 @@ ANALISTA_TITULO = [
     "downgrade", "downgrades", "downgraded", "upgrade", "upgrades", "upgraded",
     "initiates coverage", "initiated coverage", "reinstates coverage", "resumes coverage",
     "outperform", "underperform", "overweight", "underweight", "buy rating", "sell rating",
-    "hold rating", "neutral rating", "equal weight", "market perform", "top pick", "top picks"]
+    "hold rating", "neutral rating", "equal weight", "market perform", "top pick", "top picks",
+    # genericos (pegam variantes "trims its target", "cuts X PT to", "cuts stock rating"...).
+    # So se aplicam a emissor BANCO (ver validar) e com excecao de agencia de rating.
+    "target", "rating", "pt to", "reiterates", "initiates", "trims", "lifts", "raises pt"]
 # Agencias de rating: se o titulo cita uma agencia, quem foi avaliado e o proprio banco
 # (ex.: "Moody's rebaixa o JPMorgan") -> NAO e chamada do banco sobre terceiro -> mantem.
 AGENCIAS_RATING = ["fitch", "moody", "s&p", "s & p", "standard & poor", "austin rating",
