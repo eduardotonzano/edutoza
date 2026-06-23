@@ -49,9 +49,12 @@ jobs:
         id: corpo
         if: steps.run.outputs.novos != '0' && steps.run.outputs.novos != ''
         run: |
-          echo "html<<EOF" >> "$GITHUB_OUTPUT"
-          cat alerta_corpo.html >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          {
+            echo "html<<ALERTA_EOF_DELIM"
+            cat alerta_corpo.html
+            echo ""
+            echo "ALERTA_EOF_DELIM"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Enviar alerta por e-mail
         if: ${{ steps.run.outputs.novos != '0' && steps.run.outputs.novos != '' && env.MAIL_USERNAME != '' && env.MAIL_PASSWORD != '' }}

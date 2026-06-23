@@ -84,7 +84,7 @@ def main():
     print(f"  alerta: {len(itens)} itens, {len(novos)} NOVOS")
     if novos:
         with open(CORPO, "w", encoding="utf-8") as f:
-            f.write(_html(novos))
+            f.write(_html(novos) + "\n")     # newline final (o passo do e-mail exige)
     _salvar_estado(vistos)
 
     gh = os.environ.get("GITHUB_OUTPUT")
