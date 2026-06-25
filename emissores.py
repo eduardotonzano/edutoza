@@ -164,12 +164,20 @@ _FIIS = [
     ("TGAR11", "TG Ativo Real", "tg ativo"),
     ("TRXF11", "TRX Real Estate", "trx real"),
     ("SAPI11", "FII SAPI11", "sapi11"),
-    # melhor-palpite (confirmar o ticker):
+    # tickers confirmados na B3 (25/06):
     ("VISC11", "Vinci Shopping Centers", "vinci sc"),
     ("RZTR11", "Riza Terrax", "riza tx"),
     ("GARE11", "Guardian Real Estate", "guardian"),
     ("VGIP11", "Valora CRI IPCA", "valoraip"),
     ("RBRR11", "RBR Rendimento High Grade", "rbr pcri"),
+    # antes sem ticker decodificado (nome de pregao abreviado), agora confirmados na B3:
+    ("OUJP11", "Ourinvest JPP", "ouri jpp"),
+    ("GTWR11", "Green Towers", "g towers"),
+    ("VGHF11", "Valora Hedge Fund", "valor he"),
+    ("VGIR11", "Valora RE III", "valreiii"),
+    ("MMVE11", "MMVE Oportunidades Imobiliarias", "mmve op"),
+    ("TELM11", "Tellus Multiestrategia", "telm"),
+    ("FLNR11", "Floriano", "floriano"),
 ]
 for _tk, _nome, _alias in _FIIS:
     _EXTRA[f"FII {_tk}"] = {**_e(f"{_nome} ({_tk})", busca=f"{_nome} fundo imobiliario",
