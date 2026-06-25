@@ -64,15 +64,11 @@ def gerar_pdf(finais, caminho="Principais_Noticias_24h.pdf"):
         doc.build(fluxo)
         return caminho
 
-    # Prioridade por IMPACTO: noticias Positivo/Negativo (e maior relevancia) vem primeiro;
-    # Neutro/sem-impacto depois. Assim o que mexe com a tese aparece no topo do documento.
+    # Ordena por RELEVANCIA (maior primeiro): item mais relevante de cada emissor manda, e os
+    # emissores com noticia mais relevante aparecem antes.
     def _prio(n):
-        imp = (n.get("impacto") or "").strip().lower()
-        rank = 0 if imp.startswith(("positiv", "negativ")) else (1 if imp else 2)
-        return (rank, -int(n.get("relevancia") or 0))
+        return -int(n.get("relevancia") or 0)
 
-    # Agrupa por emissor; ordena os itens de cada emissor por impacto e os GRUPOS pelo
-    # melhor item (emissor com noticia de maior impacto aparece antes).
     grupos, ordem = {}, []
     for n in finais:
         k = n["nome"]
@@ -89,16 +85,11 @@ def gerar_pdf(finais, caminho="Principais_Noticias_24h.pdf"):
         fluxo.append(Paragraph(escape(f"{nome}  ({tk})"), s["Emissor"]))
         for n in itens:
             resumo = (n.get("resumo_ia") or "").strip() or n.get("titulo", "")
-            impacto = (n.get("impacto") or "").strip()
             fluxo.append(Paragraph(escape(n.get("titulo", "")), s["Titulo"]))
             fluxo.append(Paragraph(
                 escape(f"{n.get('fonte','')}  •  {n.get('data','')}  •  relevancia {n.get('relevancia','')}"),
                 s["Meta"]))
             fluxo.append(Paragraph(escape(resumo), s["Corpo"]))
-            if impacto:
-                fluxo.append(Paragraph(
-                    f'<b><font color="{_imp_cor(impacto)}">Impacto:</font></b> {escape(impacto)}',
-                    s["Corpo"]))
             link = (n.get("link") or "").strip()
             if link:
                 fluxo.append(Paragraph(f'<link href="{escape(link)}">{escape(link[:90])}</link>', s["Link"]))

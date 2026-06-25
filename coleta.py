@@ -132,7 +132,9 @@ FILLER_TITULO = ["invested in","worth this much","years ago would","5 years ago"
     # promocional / produto / institucional / local (nao e noticia de mercado da empresa)
     "credit cards","switch bonus","cashback","melhor cartao","vagas gratuitas",
     "inscricoes abertas","concurso publico","feira noturna","policia civil",
-    "policia militar","habitat shapes","zoo orbs"]
+    "policia militar","habitat shapes","zoo orbs",
+    # chamadas de trade/recomendacao (nao e fato da empresa)
+    "day trade","swing trade","operacao de compra","operacao de venda","montar posicao"]
 
 # Manchetes de CHAMADA DE ANALISTA / RATING: quando um BANCO aparece no titulo porque ELE
 # esta dando recomendacao/preco-alvo/rating de OUTRA empresa, a noticia e sobre a empresa

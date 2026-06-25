@@ -105,6 +105,6 @@ jobs:
             Bom dia/boa tarde!
 
             Seguem em anexo, referentes às últimas 24 horas (${{ steps.hoje.outputs.data }}):
-            - "Principais_Noticias_24h.pdf": as notícias do dia com resumo de IA e impacto.
+            - "Principais_Noticias_24h.pdf": as notícias do dia com resumo de IA (1 parágrafo).
             - "relatorio.xlsx": a planilha completa (todos os ativos, status e abas).
           attachments: relatorio.xlsx,Principais_Noticias_24h.pdf

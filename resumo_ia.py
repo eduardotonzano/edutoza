@@ -9,8 +9,7 @@ Funciona em 2 passes: 1) Gemini por item (em paralelo) ate a cota gratuita estou
 2) Claude Code/Haiku EM LOTES cobre o que sobrou. A etapa toda e limitada por tempo
 (IA_BUDGET). O que nao for resumido usa o titulo no PDF.
 
-Saida (2 campos): resumo (1 paragrafo com os fatos da noticia, sem opiniao) e
-impacto (Positivo/Negativo/Neutro + meia frase).
+Saida: resumo (1 paragrafo com os fatos da noticia, sem opiniao/analise).
 """
 
 import os, json, time, threading, requests
@@ -22,9 +21,8 @@ import resumo_claude
 MODELOS = ["gemini-2.5-flash-lite", "gemini-2.0-flash-lite", "gemini-2.5-flash",
            "gemini-flash-latest", "gemini-2.0-flash"]
 _URL = "https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent"
-_SCHEMA = {"type": "object", "properties": {
-    "resumo": {"type": "string"}, "impacto": {"type": "string"}},
-    "required": ["resumo", "impacto"]}
+_SCHEMA = {"type": "object", "properties": {"resumo": {"type": "string"}},
+           "required": ["resumo"]}
 
 WORKERS = 2
 TIMEOUT = 30
@@ -39,11 +37,9 @@ ATIVADO = bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("CLAUDE_CODE_O
 
 def _prompt(nome, titulo, texto):
     return (f"Empresa/ativo: {nome}.\nNOTICIA:\nTITULO: {titulo}\nTEXTO: {texto}\n\n"
-            "Responda em portugues, SOMENTE com um JSON com estas chaves exatas:\n"
-            '- "resumo": um RESUMO da propria noticia, em 1 paragrafo (3 a 5 frases), com os '
-            "fatos principais (o que aconteceu, numeros, contexto). Apenas os fatos, sem "
-            "opiniao, sem analise, sem recomendacao.\n"
-            '- "impacto": comece com Positivo, Negativo ou Neutro, + meia frase de justificativa.')
+            'Responda em portugues, SOMENTE com um JSON com a chave exata "resumo": um RESUMO '
+            "da propria noticia, em 1 paragrafo (3 a 5 frases), com os fatos principais (o que "
+            "aconteceu, numeros, contexto). Apenas os fatos, sem opiniao, analise ou recomendacao.")
 
 
 def _prompt_lote(itens):
@@ -56,15 +52,14 @@ def _prompt_lote(itens):
     corpo = "\n\n".join(blocos)
     return (f"Abaixo ha {len(itens)} noticias.\n\n{corpo}\n\n"
             "Responda em portugues, SOMENTE com um JSON valido (sem texto fora dele) neste "
-            'formato:\n{"itens": [{"resumo": "...", "impacto": "..."}]}\n'
+            'formato:\n{"itens": [{"resumo": "..."}]}\n'
             f"A lista deve ter EXATAMENTE {len(itens)} objetos, NA MESMA ORDEM das noticias. "
             'Em cada objeto: "resumo"=um resumo da propria noticia em 1 paragrafo (3 a 5 '
-            "frases) com os fatos principais, apenas os fatos, sem opiniao/analise; "
-            '"impacto"=comece com Positivo, Negativo ou Neutro + meia frase de justificativa.')
+            "frases) com os fatos principais, apenas os fatos, sem opiniao/analise/recomendacao.")
 
 
 def _resumir_gemini(chave, nome, titulo, corpo):
-    """Tenta cada modelo Gemini. Retorna ((resumo, impacto), 200) ou (None, status)."""
+    """Tenta cada modelo Gemini. Retorna (resumo, 200) ou (None, status)."""
     texto = (corpo or "").strip()[:3000] or titulo
     body = {"contents": [{"parts": [{"text": _prompt(nome, titulo, texto)}]}],
             "generationConfig": {"responseMimeType": "application/json", "responseSchema": _SCHEMA,
@@ -79,8 +74,7 @@ def _resumir_gemini(chave, nome, titulo, corpo):
                 if r.status_code == 200:
                     cand = r.json()["candidates"][0]["content"]["parts"][0]["text"]
                     d = json.loads(cand)
-                    return ((d.get("resumo", "") or "").strip(),
-                            (d.get("impacto", "") or "").strip()), 200
+                    return (d.get("resumo", "") or "").strip(), 200
                 ultimo = r.status_code
                 if r.status_code == 429 and tentativa == 0:
                     time.sleep(2)               # backoff e tenta o mesmo modelo 1x
@@ -115,7 +109,7 @@ def _passe_gemini(finais, chave, t0):
             n, f, st = fut.result()
             with trava:
                 if f:
-                    n["resumo_ia"], n["impacto"] = f
+                    n["resumo_ia"] = f
                     feitos["n"] += 1
                     falhas["n"] = 0
                 elif st is not None:
@@ -153,9 +147,9 @@ def _passe_claude(finais, t0):
                 break
             continue
         falhas = 0
-        for n, campos in zip(lote, res):
-            if campos and campos[0]:
-                n["resumo_ia"], n["impacto"] = campos
+        for n, resumo in zip(lote, res):
+            if resumo:
+                n["resumo_ia"] = resumo
                 feitos += 1
     return feitos
 

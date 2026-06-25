@@ -93,4 +93,20 @@ as fontes novas. Ampliar esse cadastro é o próximo passo para a renda fixa ren
 
 ---
 
-_Última atualização: 19/06/2026._
+## 6) (PRONTO p/ ativar) 4ª fonte de notícias — NewsData.io
+
+O código já está no robô (`news_api.py`), só falta a chave: pegue em https://newsdata.io
+(grátis) e cadastre o segredo **`NEWS_API_KEY`** em GitHub → Settings → Secrets → Actions.
+Sem a chave, é ignorada; com ela, entra automático.
+
+## Decisões registradas (23/06)
+- **Alerta de fundos**: frequência **30 min** (mantida).
+- **Resumo de IA**: **só o parágrafo** da notícia (removida a etiqueta de impacto e os
+  analistas otimista/cético).
+- **ETFs/cripto por tema**: **descartado** (não será feito).
+- **Falsos positivos**: refino contínuo — adicionados cortes de "day trade/swing trade" e
+  ruído promocional/institucional/local; segue sendo afinado a cada run real.
+
+---
+
+_Última atualização: 23/06/2026._

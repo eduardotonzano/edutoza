@@ -3,7 +3,7 @@
 Em vez da API paga da Anthropic, invoca o CLI do Claude Code
 (`claude -p ... --model claude-haiku-4-5 --output-format json`), autenticado pela ASSINATURA
 Pro/Max do dono atraves da env CLAUDE_CODE_OAUTH_TOKEN (gerada com `claude setup-token`).
-Gera, por noticia, um RESUMO de 1 paragrafo (os fatos da noticia) + impacto.
+Gera, por noticia, um RESUMO de 1 paragrafo (os fatos da noticia).
 
 So fica ATIVADO se CLAUDE_CODE_OAUTH_TOKEN existir E o binario `claude` estiver no PATH.
 Trabalha em LOTES (varias noticias por chamada) para diluir o custo de subir o processo do
@@ -64,15 +64,15 @@ def _chamar_cli(prompt, timeout=TIMEOUT):
 
 
 def _campos(o):
-    return ((o.get("resumo", "") or "").strip(), (o.get("impacto", "") or "").strip())
+    return (o.get("resumo", "") or "").strip()
 
 
 def resumir_lote(itens, prompt_lote_fn, timeout=TIMEOUT):
     """Resume varias noticias numa unica chamada do CLI.
 
     itens: lista de dicts (nome/titulo/corpo). prompt_lote_fn(itens) monta o pedido pedindo
-    um JSON com a lista de resultados NA MESMA ORDEM. Retorna (lista_de_tuplas, 200) onde
-    cada elemento e (resumo, impacto) ou None; ou (None, motivo) em falha.
+    um JSON com a lista de resultados NA MESMA ORDEM. Retorna (lista, 200) onde cada elemento
+    e o resumo (string) ou None; ou (None, motivo) em falha.
     """
     if not itens:
         return [], 200
