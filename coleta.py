@@ -136,6 +136,45 @@ FILLER_TITULO = ["invested in","worth this much","years ago would","5 years ago"
     # chamadas de trade/recomendacao (nao e fato da empresa)
     "day trade","swing trade","operacao de compra","operacao de venda","montar posicao"]
 
+# EQUITY RESEARCH: manchetes de estilo de vida / cultura / evento / promocao que acontecem
+# NUM ativo (tipico de shopping/FII: feira de maquiagem, show, gastronomia...) NAO tem valor
+# para research e nao podem aparecer. Sao cortadas quando o titulo traz um destes termos e
+# NAO traz nenhum sinal financeiro (FINANCEIRO_SINAL). Ex.: "evento de maquiagem no Iguatemi"
+# -> fora; "Iguatemi inaugura novo shopping" / "Iguatemi tem alta de receita" -> fica.
+IRRELEVANTE_TITULO = [
+    # beleza / moda
+    "maquiagem","beleza","cosmetico","cosmeticos","perfume","perfumaria","skincare","makeup",
+    "moda","desfile","fashion","passarela","grife","estilista","beauty",
+    # entretenimento / cultura
+    "show","shows","festival","concerto","turne","banda","cantor","cantora","stand-up",
+    "stand up","comedia","espetaculo","teatro","cinema","filme","serie","estreia","exposicao",
+    "mostra cultural","museu","galeria de arte","danca","musical","quadrinhos","anime","cosplay",
+    # gastronomia
+    "gastronomia","gastronomico","restaurante","restaurantes","cardapio","chef","culinaria",
+    "degustacao","hamburguer","cervejaria","food truck","praca de alimentacao","sorveteria",
+    # datas / sazonal
+    "natal","papai noel","decoracao natalina","pascoa","coelho da pascoa","dia das maes",
+    "dia dos pais","dia das criancas","dia dos namorados","festa junina","arraia","carnaval",
+    "halloween","volta as aulas","ferias escolares","dia das bruxas",
+    # familia / lazer / promo
+    "pet","adocao de animais","oficina infantil","workshop infantil","atracao","atracoes",
+    "diversao","brinquedo","parque de diversoes","sorteio","tapete vermelho","meet and greet",
+    "influencer","blogueira","celebridade","ensaio fotografico","camarim"]
+# Sinais de relevancia financeira/corporativa: se QUALQUER um aparece no titulo, a noticia
+# nao e cortada pelo filtro de equity research acima (mesmo que cite um termo de estilo de vida).
+FINANCEIRO_SINAL = [
+    "lucro","prejuizo","receita","resultado","resultados","balanco","ebitda","margem",
+    "faturamento","mesmas lojas","dividendo","dividendos","rendimento","jcp","provento",
+    "proventos","aquisicao","adquire","adquiriu","comprou","compra de","venda de","vendeu",
+    "desinvestimento","fusao","incorporacao","cisao","ipo","oferta","follow-on","follow on",
+    "subscricao","captacao","emissao","debenture","debentures","bond","divida","alavancagem",
+    "capex","investimento","investe","investira","aporte","expansao","inaugura","inauguracao",
+    "novo shopping","abre capital","rating","recompra","buyback","guidance","projecao",
+    "cotacao","fato relevante","comunicado ao mercado","assembleia","grupamento","desdobramento",
+    "concessao","leilao","licitacao","contrato","parceria","joint venture","participacao",
+    "vacancia","locacao","aluguel","cap rate","portfolio","conselho de administracao",
+    "acoes","acionista","mercado de capitais","follow"]
+
 # Manchetes de CHAMADA DE ANALISTA / RATING: quando um BANCO aparece no titulo porque ELE
 # esta dando recomendacao/preco-alvo/rating de OUTRA empresa, a noticia e sobre a empresa
 # avaliada, nao sobre o banco -> rejeitada PARA O BANCO (ver validar). Termos PT + EN.
@@ -241,6 +280,17 @@ def _eh_macro(titulo):
     t = norm(titulo)
     return any(m in t for m in MACRO_TITULO) or any(f in t for f in FILLER_TITULO)
 
+def _eh_nao_equity(titulo):
+    """True se a manchete for de estilo de vida/cultura/evento/promocao (sem valor para
+    equity research) e NAO trouxer nenhum sinal financeiro. Esse trabalho e research: uma
+    feira de maquiagem ou show num shopping nao pode entrar; ja um fato com sinal financeiro
+    (receita, aquisicao, inauguracao, divida...) fica, mesmo citando um termo de estilo."""
+    # Casa por PALAVRA inteira (conta), nao por substring: evita falso corte como "pet"
+    # dentro de "Petrobras" ou "arte" dentro de "parte".
+    if conta(titulo, IRRELEVANTE_TITULO) == 0:
+        return False
+    return conta(titulo, FINANCEIRO_SINAL) == 0
+
 def _ruido_banco(titulo):
     """True se a noticia de um BANCO for RUIDO que nao deve entrar no relatorio:
       1) chamada de analista/rating (preco-alvo, upgrade/downgrade, recomendacao...);
@@ -291,6 +341,10 @@ def validar(titulo, corpo, resumo, cfg, premium=False, empresas=None):
         return 0
     # 3) Rejeita manchete de mercado/macro (nao e noticia interna da empresa).
     if _eh_macro(titulo):
+        return 0
+    # 3b) Rejeita manchete de estilo de vida/cultura/evento (equity research): so importa o
+    # que afeta a parte financeira da empresa, nao o que acontece dentro do shopping/imovel.
+    if _eh_nao_equity(titulo):
         return 0
     # 4) Rejeita roundup: titulo citando 3+ empresas diferentes da carteira.
     if _n_empresas_no_titulo(titulo, empresas) >= 3:

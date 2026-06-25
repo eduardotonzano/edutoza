@@ -9,8 +9,8 @@ gera um Excel que lista TODOS os ativos com status (noticia encontrada / sem not
 sem noticia aplicavel).
 """
 
-import argparse, os
-from collections import Counter
+import argparse, os, re
+from collections import Counter, defaultdict
 
 from emissores import EMISSORES
 from mapeamento import mapear_carteira
@@ -26,21 +26,62 @@ from pdf_digest import gerar_pdf
 from resumo_ia import preencher_resumos, ATIVADO as IA_ATIVA
 
 
+# Palavras vazias (pt+en) e genericas que nao ajudam a distinguir uma noticia de outra.
+_STOP_DEDUP = set((
+    "para com sem que dos das nos nas uma uns por pra sobre como mais menos esta este isso "
+    "after over with from that this into your they will have what when about than then "
+    "diz disse apos ante entre seu sua suas seus pelo pela ainda apenas pode deve").split())
+_GENERICO_DEDUP = set((
+    "empresa empresas acao acoes mercado comunicado fato relevante noticia balanco hoje "
+    "ano mes dia anos bilhoes milhoes bilhao milhao reais company stock shares market today").split())
+
+
+def _assinatura(titulo, nome):
+    """Conjunto de palavras significativas do titulo (>=4 letras), sem o nome do emissor,
+    sem stopwords/genericos e sem o sufixo de fonte (' - Exame'). Usado p/ achar a MESMA
+    noticia vinda de varios veiculos (titulos parecidos, links diferentes)."""
+    t = norm(titulo)
+    t = re.sub(r"\s+[-|]\s+[^-|]{1,30}$", "", t)          # tira o sufixo do veiculo
+    toks = re.findall(r"[a-z0-9]{4,}", t)
+    nome_toks = set(re.findall(r"[a-z0-9]{4,}", norm(nome)))
+    return {w for w in toks if w not in _STOP_DEDUP and w not in _GENERICO_DEDUP
+            and w not in nome_toks}
+
+
+def _mesma_historia(a, b):
+    """True se duas assinaturas representam a mesma noticia (coef. de sobreposicao alto)."""
+    if len(a) < 3 or len(b) < 3:
+        return False
+    inter = len(a & b)
+    return inter >= 3 and inter / min(len(a), len(b)) >= 0.5
+
+
 def _dedup(itens):
-    """Remove duplicatas por link e por (emissor+titulo), preferindo maior relevancia
-    (oficial CVM/SEC=10 > RI=8 > GDELT). Mantem a 1a ocorrencia de cada."""
+    """Remove duplicatas, preferindo maior relevancia (oficial CVM/SEC=10 > RI=8 > GDELT):
+      1) por link e por (emissor+titulo) exatos;
+      2) "fuzzy": a MESMA historia do mesmo emissor vinda de varios veiculos (titulos
+         parecidos, links diferentes) - ex.: 3 manchetes do mesmo fato. Nao se aplica entre
+         dois itens OFICIAIS (cada fato relevante e unico); um item de imprensa que apenas
+         repita um oficial e descartado."""
     itens = sorted(itens, key=lambda x: -x.get("relevancia", 0))
     vistos_link, vistos_tit, out = set(), set(), []
+    sigs_por_nome = defaultdict(list)
     for it in itens:
         link = it.get("link", "")
-        tit = norm(f"{it.get('nome','')} {it.get('titulo','')}")
+        nome = it.get("nome", "")
+        tit = norm(f"{nome} {it.get('titulo','')}")
         if link and link in vistos_link:
             continue
         if tit in vistos_tit:
             continue
+        oficial = str(it.get("fonte", "")).startswith(("CVM", "SEC", "RI/"))
+        sig = _assinatura(it.get("titulo", ""), nome)
+        if not oficial and sig and any(_mesma_historia(sig, s) for s in sigs_por_nome[nome]):
+            continue
         if link:
             vistos_link.add(link)
         vistos_tit.add(tit)
+        sigs_por_nome[nome].append(sig)
         out.append(it)
     return out
 
