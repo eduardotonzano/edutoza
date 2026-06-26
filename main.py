@@ -26,26 +26,37 @@ from pdf_digest import gerar_pdf
 from resumo_ia import preencher_resumos, ATIVADO as IA_ATIVA
 
 
+def _stem(w):
+    """Stemming simples de plural: tira o 's' final de palavras longas (probe/probes,
+    price/prices) p/ que variacoes do mesmo titulo casem no dedup."""
+    return w[:-1] if len(w) > 4 and w.endswith("s") else w
+
 # Palavras vazias (pt+en) e genericas que nao ajudam a distinguir uma noticia de outra.
-_STOP_DEDUP = set((
+# Guardadas ja na forma "stem" (sem plural), pois a assinatura tambem e stemada.
+_STOP_DEDUP = {_stem(w) for w in (
     "para com sem que dos das nos nas uma uns por pra sobre como mais menos esta este isso "
-    "after over with from that this into your they will have what when about than then "
-    "diz disse apos ante entre seu sua suas seus pelo pela ainda apenas pode deve").split())
-_GENERICO_DEDUP = set((
+    "via seu sua suas seus pelo pela ainda apenas pode deve "
+    "the for and new its out has was are but not over with from that this into your they "
+    "will have what when about than then diz disse apos ante entre").split()}
+_GENERICO_DEDUP = {_stem(w) for w in (
     "empresa empresas acao acoes mercado comunicado fato relevante noticia balanco hoje "
-    "ano mes dia anos bilhoes milhoes bilhao milhao reais company stock shares market today").split())
+    "ano mes dia anos bilhoes milhoes bilhao milhao reais company stock shares market today").split()}
 
 
 def _assinatura(titulo, nome):
-    """Conjunto de palavras significativas do titulo (>=4 letras), sem o nome do emissor,
-    sem stopwords/genericos e sem o sufixo de fonte (' - Exame'). Usado p/ achar a MESMA
-    noticia vinda de varios veiculos (titulos parecidos, links diferentes)."""
+    """Conjunto de palavras significativas do titulo (3+ letras OU numeros, ja stemadas),
+    sem o nome do emissor, stopwords/genericos e o sufixo de fonte (' - Exame'). Usado p/
+    achar a MESMA noticia vinda de varios veiculos. Mantem 'CRI', '535', '365' (sinais
+    fortes do fato) que antes eram descartados por terem <4 letras."""
     t = norm(titulo)
     t = re.sub(r"\s+[-|]\s+[^-|]{1,30}$", "", t)          # tira o sufixo do veiculo
-    toks = re.findall(r"[a-z0-9]{4,}", t)
-    nome_toks = set(re.findall(r"[a-z0-9]{4,}", norm(nome)))
-    return {w for w in toks if w not in _STOP_DEDUP and w not in _GENERICO_DEDUP
-            and w not in nome_toks}
+    nome_toks = {_stem(w) for w in re.findall(r"[a-z0-9]{3,}", norm(nome))}
+    sig = set()
+    for w in re.findall(r"[a-z0-9]{3,}", t):
+        w = _stem(w)
+        if w not in _STOP_DEDUP and w not in _GENERICO_DEDUP and w not in nome_toks:
+            sig.add(w)
+    return sig
 
 
 def _mesma_historia(a, b):
