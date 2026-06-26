@@ -64,7 +64,7 @@ def main():
     candidatos = {}
     candidatos.update(coletar_google(alvos))        # Google News por FII/gestora
     candidatos.update(coletar_yahoo(alvos))         # Yahoo por ticker de FII
-    finais, _, _ = validar_todos(candidatos, {}, reg)
+    finais, _, _, _ = validar_todos(candidatos, {}, reg)
 
     gestoras = [c for c in alvos if c.get("categoria") == "Gestora" and c.get("ri_url")]
     try:
