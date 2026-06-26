@@ -564,12 +564,9 @@ def validar_todos(candidatos, corpos, empresas):
     por_ativo = defaultdict(list)
     for n in validadas.values():
         por_ativo[n["nome"]].append(n)
-    finais = []   # recorte das PRINCIPAIS (teto por emissor) -> PDF/Excel
-    todas = []    # TODAS as validadas (mesmos objetos, sem teto) -> dashboard
+    finais = []
     for nome, lst in por_ativo.items():
         lst.sort(key=lambda x: (-x["score"], -x["data_obj"].timestamp()))
         finais.extend(lst[:MAX_POR_ATIVO])
-        todas.extend(lst)
     finais.sort(key=lambda x: (x["ticker"], -x["data_obj"].timestamp()))
-    todas.sort(key=lambda x: (x["ticker"], -x["data_obj"].timestamp()))
-    return finais, todas, sem_corpo, fora_janela
+    return finais, sem_corpo, fora_janela

@@ -23,7 +23,6 @@ from sec_edgar import buscar_fatos_sec
 from ri_scraping import raspar_ris
 from excel import gerar_excel
 from pdf_digest import gerar_pdf
-from dashboard import gerar_dashboard_html
 from resumo_ia import preencher_resumos, ATIVADO as IA_ATIVA
 
 
@@ -138,11 +137,9 @@ def main():
     precisam = {l: c for l, c in candidatos.items() if precisa_corpo(c["titulo"], gdelt_reg)}
     print(f"    {len(precisam)}/{len(candidatos)} precisam de corpo (nome ambiguo)")
     corpos = baixar_corpos(precisam)
-    # imprensa_finais = recorte das principais (teto por emissor) -> PDF/Excel.
-    # imprensa_todas  = TODAS as validadas (sem teto), mesmos objetos -> dashboard.
-    imprensa_finais, imprensa_todas, sem_corpo, fora_janela = validar_todos(candidatos, corpos, gdelt_reg)
+    imprensa_finais, sem_corpo, fora_janela = validar_todos(candidatos, corpos, gdelt_reg)
     cobertos = len(Counter(n["nome"] for n in imprensa_finais))
-    print(f"    {len(imprensa_finais)} principais / {len(imprensa_todas)} captadas | "
+    print(f"    {len(imprensa_finais)} noticias validadas | "
           f"{cobertos} emissores cobertos ({fora_janela} fora da janela de 24h)")
 
     print(f"4/6 Fatos relevantes (CVM {len(cvm_em)} | SEC {len(us_em)} | RI {len(ri_em)})...")
@@ -153,23 +150,17 @@ def main():
     fatos_ri = raspar_ris(ri_em)
     print(f"    RI: {len(fatos_ri)} releases raspados")
 
-    # PRINCIPAIS (recorte com teto por emissor) -> PDF/Excel.
     finais = _dedup(fatos_sec + fatos_cvm + fatos_ri + imprensa_finais)
     finais.sort(key=lambda x: (str(x["ticker"]), -x["data_obj"].timestamp()))
-    # COMPLETA (todas as captadas, sem teto) -> dashboard. Compartilha os MESMOS objetos.
-    finais_completo = _dedup(fatos_sec + fatos_cvm + fatos_ri + imprensa_todas)
-    finais_completo.sort(key=lambda x: (str(x["ticker"]), -x["data_obj"].timestamp()))
-    print(f"    {len(finais)} principais / {len(finais_completo)} no dashboard apos juntar e deduplicar")
+    print(f"    {len(finais)} itens apos juntar e deduplicar")
 
     print("5/6 Resumindo com IA (Gemini + Claude Code/Haiku reserva; resumo de 1 paragrafo)...")
     if IA_ATIVA:
-        # Resume a lista COMPLETA: como o recorte 'finais' usa os mesmos objetos, o PDF/Excel
-        # herdam os resumos de graca.
-        preencher_resumos(finais_completo)
+        preencher_resumos(finais)
     else:
         print("    (pulado: nenhuma chave de IA configurada)")
 
-    print("6/6 Gerando Excel, PDF e Dashboard...")
+    print("6/6 Gerando Excel e PDF...")
     arq, n_not, n_mon = gerar_excel(alvos, finais, args.saida)
     print(f"    Excel: {arq}")
     try:
@@ -177,11 +168,6 @@ def main():
         print(f"    PDF: {pdf}")
     except Exception as e:
         print(f"    PDF falhou (seguindo sem ele): {str(e)[:80]}")
-    try:
-        dash = gerar_dashboard_html(finais_completo, alvos, "Dashboard_Noticias_24h.html")
-        print(f"    Dashboard: {dash}")
-    except Exception as e:
-        print(f"    Dashboard falhou (seguindo sem ele): {str(e)[:80]}")
 
     print("\n--- MATCHES (confira a qualidade) ---")
     for n in finais:
