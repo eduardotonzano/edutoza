@@ -167,3 +167,68 @@ Brasília = UTC−3, então `20` = 17:00 daqui. Ex.: para 18:00 de Brasília, us
 > IPs de datacenter (timeout); por isso o passo tem timeout curto e é "melhor
 > esforço" — se a CVM não responder, o robô apenas segue sem os fatos relevantes
 > (sem derrubar o run).
+
+---
+
+# Dólar x CDI — documento de rentabilidade acumulada
+
+Segundo sistema deste repositório (independente do monitor de notícias acima): gera
+automaticamente um **PDF pronto para enviar**, comparando a variação do dólar (USD/BRL)
+com o rendimento acumulado do CDI em 4 janelas de tempo (1, 5, 10 e 20 anos), com o
+mesmo estilo visual (cores, fonte e logo) da Multiplica usado nas lâminas de fundos —
+substitui a antiga planilha `dolar_x_cdi._auto__comparação.xlsm` (que dependia de dados
+pagos do Bloomberg Terminal, hoje desatualizada) por um pipeline automático com **fontes
+100% oficiais e gratuitas**.
+
+## Fontes oficiais dos dados
+Ambas do **Sistema Gerenciador de Séries Temporais (SGS)** do Banco Central do Brasil —
+públicas, gratuitas, sem necessidade de cadastro ou chave de API:
+
+| Dado | Série SGS | O que é |
+|---|---|---|
+| Dólar (USD/BRL) | [série 1](https://api.bcb.gov.br/dados/serie/bcdata.sgs.1/dados) | Taxa de câmbio Livre — dólar americano (venda), diária. É a cotação **PTAX-venda**, a referência oficial usada em balanços e contratos no Brasil. |
+| CDI | [série 4391](https://api.bcb.gov.br/dados/serie/bcdata.sgs.4391/dados) | CDI anualizado, base 252 dias úteis (% a.a.), calculado pelo BCB a partir dos dados da B3. |
+
+**Metodologia:** o dólar usa a variação simples entre a cotação de início e de fim de
+cada janela; o CDI (e o "CDI + spread", uma linha de referência auxiliar) usa
+capitalização diária composta — fator do dia = `(1 + CDI% a.a.)^(1/252)`, acumulado dia
+a dia. Mesma lógica de composição que já existia na planilha original, só que a partir
+de dados oficiais em vez do Bloomberg.
+
+## Como usar
+```bash
+cd dolar_x_cdi
+pip install -r requirements.txt
+python gerar_documento.py                 # busca os dados reais no Banco Central
+python gerar_documento.py --spread 0.05    # muda o "CDI + X%" de referência (padrão: 4%)
+```
+O PDF sai em `dolar_x_cdi/output/Dolar_x_CDI_<data>.pdf`.
+
+**Pedir para o Claude gerar o documento:** basta pedir "elabore o documento Dólar x CDI"
+(ou similar) numa conversa com o Claude Code neste repositório — ele roda o
+`gerar_documento.py` e te devolve o PDF atualizado. Isso só funciona num ambiente com
+acesso à internet livre (a sessão precisa alcançar `api.bcb.gov.br`); num sandbox com
+rede restrita, rode `python gerar_documento.py --amostra` para gerar um PDF de
+demonstração do layout (marcado em vermelho como amostra, com dados antigos da planilha
+original só para validar o visual) — ou use a automação abaixo.
+
+## Automação (GitHub Actions) — sem depender de sessão nenhuma
+O arquivo `.github/workflows/dolar_x_cdi.yml` gera o documento sozinho, todo **dia 1 de
+cada mês**, e manda por e-mail (reaproveita os mesmos segredos `MAIL_USERNAME` /
+`MAIL_PASSWORD` já configurados para o monitor de notícias — ver seção de automação
+acima). Como as janelas são de médio/longo prazo, não precisa rodar todo dia.
+Para gerar na hora: aba **Actions** → **Documento Dólar x CDI** → **Run workflow**.
+
+## Estrutura
+- `fontes.py` — busca as duas séries no BCB (com cache local em `cache/`, para não
+  depender de internet toda vez e continuar funcionando com o último dado se o BCB
+  estiver fora do ar no momento).
+- `calculo.py` — calcula a rentabilidade acumulada de cada janela (dólar, CDI, CDI+spread)
+  e indicadores complementares (volatilidade, maior alta/queda, drawdown).
+- `graficos.py` — gera os gráficos (matplotlib) no estilo visual da marca.
+- `estilo.py` — paleta de cores, fonte e logo (extraídos das lâminas de exemplo).
+- `modelo.html` + `documento.py` — monta o HTML e renderiza o PDF final (WeasyPrint).
+- `gerar_documento.py` — ponto de entrada (`--amostra`, `--spread`, `--saida`).
+- `amostra/` — dados históricos (2006–2026) que já vinham na planilha original
+  (Bloomberg), usados **só** no modo `--amostra` para testar o layout sem internet.
+  Nunca usados no modo normal (que sempre busca o dado oficial mais recente no BCB).
