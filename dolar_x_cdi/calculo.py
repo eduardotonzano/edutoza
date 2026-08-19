@@ -3,16 +3,14 @@
 Metodologia:
 - Dólar (USD/BRL): retorno simples entre a cotação PTAX-venda no início e
   no fim da janela (P_fim / P_ini - 1).
-- CDI: capitalização diária composta. A série do BCB pode vir anualizada
-  (% a.a., ex.: 13,75) ou já em taxa diária (% a.d., ex.: 0,0511) —
-  detectamos qual é pela ordem de grandeza dos valores (ver
-  `_cdi_e_anualizado`) em vez de presumir, porque isso já mudou de um dia
-  para o outro entre séries do SGS. Anualizada: fator_dia =
-  (1 + cdi_%a.a./100)^(1/252). Diária: fator_dia = 1 + cdi_%a.d./100.
-  Em ambos os casos, acumulado = produtório dos fatores diários na janela.
-- CDI + spread (ex.: CDI + 4% a.a.): mesmo fator diário do CDI multiplicado
-  por um fator extra (1 + spread)^(1/252) — combina os dois juros ao dia,
-  igual à lógica já usada na planilha original.
+- CDI: apesar do nome "CDI anualizada base 252", a série 4391 do BCB devolve
+  na prática ~1 ponto por MÊS (confirmado batendo os valores com o histórico
+  real da Selic e pela contagem de pontos por janela, que bate exatamente
+  com anos×12+1) — cada ponto é a variação do CDI naquele mês (ex.: 1,16 =
+  +1,16% no mês). A composição é direta, um fator por ponto:
+  fator_mes = 1 + cdi_%mes/100, acumulado = produtório na janela.
+- CDI + spread (ex.: CDI + 4% a.a.): mesmo fator mensal do CDI multiplicado
+  por um fator extra (1 + spread)^(1/12) — combina os dois juros ao mês.
 """
 from __future__ import annotations
 
@@ -59,37 +57,24 @@ def _serie_acumulada_dolar(pontos: list[PontoSerie]) -> list[tuple[dt.date, floa
     return [(p.data, (p.valor / base - 1) * 100) for p in pontos]
 
 
-def _cdi_e_anualizado(pontos: list[PontoSerie]) -> bool:
-    """Detecta se a série do CDI veio anualizada (% a.a., tipicamente 2–20) ou
-    já em taxa diária (% a.d., tipicamente < 1) — em vez de presumir a
-    convenção de antemão. No Brasil, mesmo no piso histórico da Selic (2%
-    a.a., em 2020), o CDI anualizado nunca chega perto de 1; e a taxa diária
-    nunca chega perto de 1 mesmo nos picos de juros. A mediana separa bem
-    os dois casos.
-    """
-    valores = sorted(p.valor for p in pontos)
-    mediana = valores[len(valores) // 2]
-    return mediana >= 1
+MESES_ANO = 12
 
 
 def _serie_acumulada_cdi(pontos: list[PontoSerie], spread_aa: float = 0.0) -> list[tuple[dt.date, float]]:
-    """Acumula o CDI dia a dia via fator composto.
+    """Acumula o CDI mês a mês via fator composto (ver nota de metodologia
+    no topo do arquivo sobre por que é mensal, não diário).
 
     `spread_aa` é um adicional anual (ex.: 0.04 para CDI + 4% a.a.),
-    aplicado como fator extra composto ao dia junto ao fator do CDI.
+    aplicado como fator extra composto ao mês junto ao fator do CDI.
     """
     if not pontos:
         return []
-    anualizado = _cdi_e_anualizado(pontos)
-    fator_spread_dia = (1 + spread_aa) ** (1 / DIAS_UTEIS_ANO) if spread_aa else 1.0
+    fator_spread_mes = (1 + spread_aa) ** (1 / MESES_ANO) if spread_aa else 1.0
     serie = []
     acumulado = 1.0
     for p in pontos:
-        if anualizado:
-            fator_dia = (1 + p.valor / 100) ** (1 / DIAS_UTEIS_ANO)
-        else:
-            fator_dia = 1 + p.valor / 100
-        acumulado *= fator_dia * fator_spread_dia
+        fator_mes = 1 + p.valor / 100
+        acumulado *= fator_mes * fator_spread_mes
         serie.append((p.data, (acumulado - 1) * 100))
     return serie
 
@@ -114,13 +99,15 @@ def calcular_janela(
 
     d_janela = _corta_janela(dolar, data_alvo_inicio, data_fim)
     c_janela = _corta_janela(cdi, data_alvo_inicio, data_fim)
+    # O corte acima é inclusivo nas duas pontas; com dado mensal isso pega um mês
+    # a mais do que o pedido (ex.: 13 meses pra janela de "1 ano"), porque o ponto
+    # na borda de início já é um retorno mensal cheio, não um nível de preço como
+    # o dólar. Mantém só os anos*12 meses mais recentes.
+    max_pontos_cdi = anos * MESES_ANO
+    if len(c_janela) > max_pontos_cdi:
+        c_janela = c_janela[-max_pontos_cdi:]
     if len(d_janela) < 2 or len(c_janela) < 2:
         return None
-
-    valores_cdi = sorted(p.valor for p in c_janela)
-    print(f"[diagnóstico CDI] janela {rotulo}: {len(c_janela)} pontos, "
-          f"min={valores_cdi[0]:.4f} mediana={valores_cdi[len(valores_cdi)//2]:.4f} "
-          f"max={valores_cdi[-1]:.4f} -> anualizado={_cdi_e_anualizado(c_janela)}")
 
     serie_dolar = _serie_acumulada_dolar(d_janela)
     serie_cdi = _serie_acumulada_cdi(c_janela, spread_aa=0.0)

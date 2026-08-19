@@ -8,12 +8,10 @@ gratuitas, sem chave de acesso:
   a mesma referência usada em balanços, notas fiscais e contratos no Brasil.
   https://api.bcb.gov.br/dados/serie/bcdata.sgs.1/dados
 
-- CDI: série 4391 — "Taxa de juros - CDI anualizada base 252". Publicada
-  diariamente pelo BCB a partir dos dados da B3/CETIP. Nominalmente
-  anualizada (% a.a., base 252 dias úteis), mas a documentação da série
-  no SGS é inconsistente com o que a API às vezes devolve — por isso
-  `calculo.py` detecta a convenção real pela ordem de grandeza dos
-  valores em vez de presumir (ver `_cdi_e_anualizado`).
+- CDI: série 4391. Nomeada "CDI anualizada base 252" no catálogo do SGS,
+  mas a API devolve, na prática, ~1 ponto por MÊS (confirmado batendo os
+  valores com o histórico real da Selic e pela contagem de pontos por
+  janela — ver `calculo.py` para a composição mensal usada).
   https://api.bcb.gov.br/dados/serie/bcdata.sgs.4391/dados
 
 Os dados baixados são gravados em cache local (CSV) em `cache/`, para que
@@ -36,12 +34,12 @@ PASTA_CACHE = Path(__file__).parent / "cache"
 PASTA_CACHE.mkdir(exist_ok=True)
 
 SERIE_DOLAR = 1        # Dólar americano (venda) - diário (PTAX)
-SERIE_CDI = 4391       # CDI anualizada base 252 (% a.a.)
+SERIE_CDI = 4391       # CDI - na prática, ~1 ponto por mês (ver calculo.py)
 
 URL_SGS = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados"
 
 FONTE_DOLAR_NOME = "Banco Central do Brasil — PTAX (dólar venda), série SGS 1"
-FONTE_CDI_NOME = "Banco Central do Brasil — CDI anualizada base 252, série SGS 4391"
+FONTE_CDI_NOME = "Banco Central do Brasil — CDI, série SGS 4391"
 FONTE_URL = "https://www3.bcb.gov.br/sgspub/localizarseries/localizarSeries.do"
 
 
