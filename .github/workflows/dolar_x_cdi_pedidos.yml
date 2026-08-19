@@ -1,0 +1,39 @@
+name: Dólar x CDI - pedidos por e-mail
+
+# Deixa QUALQUER PESSOA pedir o documento "Dólar x CDI" sem precisar de conta no GitHub
+# (nem no Claude): manda um e-mail com "dólar x cdi" no assunto para a caixa configurada,
+# e este robô responde em até ~15 min com o PDF atualizado anexado.
+#
+# Roda a cada 15 minutos, olhando e-mails não lidos na caixa de entrada (IMAP). Complementa
+# o dolar_x_cdi.yml (que gera automaticamente todo dia 1 do mês, sem precisar de pedido).
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: dolar-x-cdi-pedidos
+  cancel-in-progress: false
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependências
+        run: pip install -r dolar_x_cdi/requirements.txt
+
+      - name: Verificar pedidos e responder por e-mail
+        if: ${{ env.MAIL_USERNAME != '' && env.MAIL_PASSWORD != '' }}
+        working-directory: dolar_x_cdi
+        env:
+          MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+        run: python verificar_pedidos.py

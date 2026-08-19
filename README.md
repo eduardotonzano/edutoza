@@ -217,7 +217,28 @@ O arquivo `.github/workflows/dolar_x_cdi.yml` gera o documento sozinho, todo **d
 cada mês**, e manda por e-mail (reaproveita os mesmos segredos `MAIL_USERNAME` /
 `MAIL_PASSWORD` já configurados para o monitor de notícias — ver seção de automação
 acima). Como as janelas são de médio/longo prazo, não precisa rodar todo dia.
-Para gerar na hora: aba **Actions** → **Documento Dólar x CDI** → **Run workflow**.
+Para gerar na hora **quem tem acesso ao GitHub**: aba **Actions** → **Documento Dólar x
+CDI** → **Run workflow**.
+
+## Pedir por e-mail — sem precisar de GitHub nem de Claude
+Pensado para qualquer pessoa do time que não tenha (ou não queira usar) conta no GitHub:
+basta **mandar um e-mail** para o endereço configurado (o mesmo do monitor de notícias)
+com uma destas frases no **assunto**: `dólar x cdi`, `dolar cdi` ou `gerar documento`
+(não é sensível a acento/maiúscula). Em até ~15 minutos, o robô responde automaticamente
+para quem pediu, com o PDF atualizado (dados oficiais do BCB) em anexo.
+
+Como funciona (`.github/workflows/dolar_x_cdi_pedidos.yml` + `verificar_pedidos.py`):
+a cada 15 minutos, um robô lê a caixa de entrada via IMAP procurando e-mails não lidos
+com uma das frases-gatilho no assunto; para cada um, gera o documento na hora e responde
+diretamente ao remetente com o PDF anexado (ou avisa se algo deu errado). Não precisa de
+nenhuma dependência nova — usa só `imaplib`/`smtplib` da biblioteca padrão do Python, com
+o mesmo login de app do Gmail já usado para enviar os e-mails do monitor de notícias.
+
+> ⚠️ Qualquer pessoa que souber o endereço de e-mail e usar a frase certa no assunto
+> consegue disparar uma geração — não há autenticação além disso. Adequado para uso
+> interno de time; não divulgue o endereço publicamente. Limite de segurança: no máximo
+> 5 pedidos processados por execução (a cada 15 min), pra não sobrecarregar em caso de
+> uso indevido.
 
 ## Estrutura
 - `fontes.py` — busca as duas séries no BCB (com cache local em `cache/`, para não
@@ -228,7 +249,10 @@ Para gerar na hora: aba **Actions** → **Documento Dólar x CDI** → **Run wor
 - `graficos.py` — gera os gráficos (matplotlib) no estilo visual da marca.
 - `estilo.py` — paleta de cores, fonte e logo (extraídos das lâminas de exemplo).
 - `modelo.html` + `documento.py` — monta o HTML e renderiza o PDF final (WeasyPrint).
-- `gerar_documento.py` — ponto de entrada (`--amostra`, `--spread`, `--saida`).
+- `gerar_documento.py` — ponto de entrada CLI (`--amostra`, `--spread`, `--saida`) e as
+  funções reutilizáveis `gerar_a_partir_do_bcb` / `gerar_a_partir_de_amostra`.
+- `verificar_pedidos.py` — lê pedidos por e-mail (IMAP) e responde com o PDF (ver seção
+  "Pedir por e-mail" acima).
 - `amostra/` — dados históricos (2006–2026) que já vinham na planilha original
   (Bloomberg), usados **só** no modo `--amostra` para testar o layout sem internet.
   Nunca usados no modo normal (que sempre busca o dado oficial mais recente no BCB).
