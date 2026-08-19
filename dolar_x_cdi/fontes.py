@@ -99,20 +99,35 @@ def _consultar_bcb(codigo: int, data_inicial: dt.date, data_final: dt.date) -> l
         "dataInicial": data_inicial.strftime("%d/%m/%Y"),
         "dataFinal": data_final.strftime("%d/%m/%Y"),
     }
-    # O gateway do BCB devolve 406 Not Acceptable para requisições sem um
-    # User-Agent "de navegador" (o padrão do requests, tipo "python-requests/x.y",
-    # é rejeitado). Um User-Agent comum resolve.
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; DolarXCDI/1.0; +https://github.com/eduardotonzano/edutoza)",
-        "Accept": "application/json",
-    }
+    # O gateway do BCB costuma devolver 406 Not Acceptable pra requisições que não
+    # parecem vir de navegador. Duas causas conhecidas, que tentamos contornar em
+    # sequência: (1) o requests pede compressão Brotli ("Accept-Encoding: br") quando
+    # a lib brotli está instalada (é dependência do weasyprint) e o gateway não lida
+    # bem com isso; (2) o User-Agent/Accept não parecem "de navegador". Se a 1ª
+    # tentativa (headers de navegador completos) falhar com 406, tenta de novo só
+    # forçando Accept-Encoding sem Brotli.
+    tentativas_headers = [
+        {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Encoding": "gzip, deflate",
+            "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+        },
+        {"Accept-Encoding": "gzip, deflate"},
+    ]
     url = URL_SGS.format(codigo=codigo)
-    try:
-        resp = requests.get(url, params=params, headers=headers, timeout=30)
-        resp.raise_for_status()
-        dados = resp.json()
-    except Exception as exc:  # rede indisponível, host recusou, JSON inválido...
-        raise ErroFonteDados(f"Falha ao consultar BCB SGS série {codigo}: {exc}") from exc
+    ultimo_erro: Exception | None = None
+    for headers in tentativas_headers:
+        try:
+            resp = requests.get(url, params=params, headers=headers, timeout=30)
+            resp.raise_for_status()
+            dados = resp.json()
+            break
+        except Exception as exc:  # rede indisponível, host recusou, JSON inválido...
+            ultimo_erro = exc
+    else:
+        raise ErroFonteDados(f"Falha ao consultar BCB SGS série {codigo}: {ultimo_erro}") from ultimo_erro
 
     pontos = []
     for item in dados:
