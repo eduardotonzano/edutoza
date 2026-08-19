@@ -13,3 +13,7 @@ alertas_estado.json
 # Dolar x CDI - documento gerado e cache de dados do BCB (regeneraveis)
 dolar_x_cdi/output/
 dolar_x_cdi/cache/
+
+# Dolar x CDI - formulario web (Cloudflare Worker): cache local da wrangler CLI
+dolar_x_cdi/pedido_web/.wrangler/
+dolar_x_cdi/pedido_web/node_modules/

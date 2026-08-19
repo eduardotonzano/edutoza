@@ -1,0 +1,14 @@
+name = "dolar-x-cdi-pedido"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# KV namespace usado só para limitar pedidos repetidos (mesmo IP ou mesmo
+# e-mail não conseguem disparar toda hora). Crie com:
+#   npx wrangler kv namespace create PEDIDOS_CDI
+# e cole o "id" retornado abaixo (ver README.md nesta pasta para o passo a passo).
+[[kv_namespaces]]
+binding = "PEDIDOS_CDI"
+id = "COLE_AQUI_O_ID_DO_NAMESPACE"
+
+# O segredo GITHUB_TOKEN NÃO vai aqui (nunca em texto no repositório) — configure com:
+#   npx wrangler secret put GITHUB_TOKEN
