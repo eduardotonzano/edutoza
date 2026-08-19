@@ -117,6 +117,11 @@ def calcular_janela(
     if len(d_janela) < 2 or len(c_janela) < 2:
         return None
 
+    valores_cdi = sorted(p.valor for p in c_janela)
+    print(f"[diagnóstico CDI] janela {rotulo}: {len(c_janela)} pontos, "
+          f"min={valores_cdi[0]:.4f} mediana={valores_cdi[len(valores_cdi)//2]:.4f} "
+          f"max={valores_cdi[-1]:.4f} -> anualizado={_cdi_e_anualizado(c_janela)}")
+
     serie_dolar = _serie_acumulada_dolar(d_janela)
     serie_cdi = _serie_acumulada_cdi(c_janela, spread_aa=0.0)
     serie_cdi_spread = _serie_acumulada_cdi(c_janela, spread_aa=spread_aa)
