@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import csv
 import datetime as dt
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -99,20 +100,39 @@ def _consultar_bcb(codigo: int, data_inicial: dt.date, data_final: dt.date) -> l
         "dataInicial": data_inicial.strftime("%d/%m/%Y"),
         "dataFinal": data_final.strftime("%d/%m/%Y"),
     }
-    # O gateway do BCB devolve 406 Not Acceptable para requisições sem um
-    # User-Agent "de navegador" (o padrão do requests, tipo "python-requests/x.y",
-    # é rejeitado). Um User-Agent comum resolve.
+    # O 406 do gateway do BCB não mudou com nenhuma variação de headers testada até
+    # agora — o mais provável é bloqueio (intermitente) de IPs de datacenter, o
+    # mesmo comportamento já visto com a CVM neste projeto (ver README). Contra
+    # isso, headers sozinhos não resolvem; o que ajuda é tentar de novo (o runner
+    # do GitHub Actions pode sair por um IP diferente numa nova tentativa) e, se
+    # persistir, mostrar o corpo da resposta do BCB — que deve indicar o motivo
+    # real — em vez de só repetir "406 Not Acceptable" às cegas.
     headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; DolarXCDI/1.0; +https://github.com/eduardotonzano/edutoza)",
-        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Encoding": "gzip, deflate",
     }
     url = URL_SGS.format(codigo=codigo)
-    try:
-        resp = requests.get(url, params=params, headers=headers, timeout=30)
-        resp.raise_for_status()
-        dados = resp.json()
-    except Exception as exc:  # rede indisponível, host recusou, JSON inválido...
-        raise ErroFonteDados(f"Falha ao consultar BCB SGS série {codigo}: {exc}") from exc
+    tentativas = 4
+    atrasos = [3, 6, 12]  # segundos entre tentativas (backoff)
+    ultimo_erro: Exception | None = None
+    for tentativa in range(tentativas):
+        try:
+            resp = requests.get(url, params=params, headers=headers, timeout=30)
+            if resp.status_code != 200:
+                corpo = resp.text[:300].replace("\n", " ")
+                raise ErroFonteDados(
+                    f"BCB SGS série {codigo} devolveu HTTP {resp.status_code}: {corpo!r}"
+                )
+            dados = resp.json()
+            break
+        except Exception as exc:  # rede indisponível, host recusou, JSON inválido...
+            ultimo_erro = exc
+            if tentativa < tentativas - 1:
+                time.sleep(atrasos[tentativa])
+    else:
+        raise ErroFonteDados(f"Falha ao consultar BCB SGS série {codigo}: {ultimo_erro}") from ultimo_erro
 
     pontos = []
     for item in dados:
