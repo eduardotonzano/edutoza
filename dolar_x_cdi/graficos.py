@@ -108,9 +108,14 @@ def grafico_resumo_barras(janelas: list[JanelaResultado], caminho_saida: Path) -
     ax.axvline(0, color=NAVY, linewidth=1)
     ax.xaxis.set_major_formatter(FuncFormatter(_fmt_pct))
     ax.tick_params(axis="x", labelsize=8)
+    ax.tick_params(axis="y", pad=8)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.spines["left"].set_visible(False)
+    # Espaço extra nas duas pontas: sem isso, o rótulo de valor de uma barra
+    # negativa curta (ex.: dólar em -8%, numa janela onde o eixo vai até 600%
+    # por causa do CDI) fica colado no rótulo da categoria à esquerda.
+    ax.margins(x=0.22)
     ax.invert_yaxis()
     ax.legend(loc="upper center", fontsize=8.5, frameon=False, ncol=2, bbox_to_anchor=(0.5, 1.28))
 
