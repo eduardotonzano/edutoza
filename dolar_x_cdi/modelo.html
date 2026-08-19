@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<style>
+  @page {
+    size: 1000px 2000px;
+    margin: 0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: {{ fonte }};
+    color: {{ navy }};
+    font-size: 13px;
+    background: {{ branco }};
+  }
+  .cabecalho {
+    background: {{ navy }};
+    color: {{ branco }};
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 26px 40px;
+  }
+  .cabecalho img { height: 34px; display: block; }
+  .cabecalho .titulo { text-align: right; }
+  .cabecalho .titulo h1 {
+    margin: 0;
+    font-size: 26px;
+    letter-spacing: 0.5px;
+    font-weight: 700;
+  }
+  .cabecalho .titulo p {
+    margin: 4px 0 0;
+    font-size: 13px;
+    color: {{ ciano }};
+    font-weight: 500;
+  }
+  .faixa-amostra {
+    background: {{ vermelho }};
+    color: {{ branco }};
+    text-align: center;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 7px;
+  }
+
+  .conteudo { padding: 26px 40px 10px; }
+
+  .rotulo-secao {
+    color: {{ ciano }};
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin: 22px 0 10px;
+  }
+  .rotulo-secao:first-child { margin-top: 4px; }
+
+  .bloco { break-inside: avoid; }
+
+  .texto { line-height: 1.55; color: {{ navy }}; }
+  .texto strong { font-weight: 700; }
+
+  .linha { display: flex; gap: 22px; align-items: flex-start; }
+  .col-principal { flex: 2.55; }
+  .col-lateral { flex: 1; }
+
+  table.tabela-principal {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  table.tabela-principal thead th {
+    background: {{ navy }};
+    color: {{ branco }};
+    font-weight: 600;
+    font-size: 12px;
+    text-align: right;
+    padding: 10px 12px;
+  }
+  table.tabela-principal thead th:first-child { text-align: left; }
+  table.tabela-principal tbody td {
+    text-align: right;
+    padding: 11px 12px;
+    border-bottom: 1px solid {{ cinza_borda }};
+    font-size: 13px;
+  }
+  table.tabela-principal tbody td:first-child {
+    text-align: left;
+    font-weight: 600;
+  }
+  table.tabela-principal tbody tr.destaque td:first-child {
+    border-left: 3px solid {{ ciano }};
+    padding-left: 9px;
+  }
+  table.tabela-principal tbody tr.destaque { background: {{ cinza_claro }}; }
+  .neg { color: {{ vermelho }}; }
+
+  .caixa {
+    background: {{ cinza_claro }};
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .caixa .titulo-caixa {
+    background: {{ navy }};
+    color: {{ branco }};
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 10px 14px;
+  }
+  .caixa .item {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid {{ cinza_borda }};
+    font-size: 12px;
+  }
+  .caixa .item:last-child { border-bottom: none; }
+  .caixa .item .rot { color: {{ cinza_texto }}; }
+  .caixa .item .val { font-weight: 700; text-align: right; }
+  .caixa .rodape-caixa {
+    font-size: 10.5px;
+    color: {{ cinza_texto }};
+    padding: 10px 14px 12px;
+    line-height: 1.45;
+  }
+
+  .grade-graficos {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 18px;
+  }
+  .grade-graficos img { width: 100%; display: block; }
+
+  .grafico-resumo img { width: 100%; display: block; }
+
+  table.tabela-indicadores {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  table.tabela-indicadores thead th {
+    background: {{ navy }};
+    color: {{ branco }};
+    font-weight: 600;
+    padding: 9px 10px;
+    text-align: right;
+  }
+  table.tabela-indicadores thead th:first-child { text-align: left; }
+  table.tabela-indicadores tbody td {
+    padding: 9px 10px;
+    text-align: right;
+    border-bottom: 1px solid {{ cinza_borda }};
+  }
+  table.tabela-indicadores tbody td:first-child { text-align: left; font-weight: 600; }
+  table.tabela-indicadores tbody tr:nth-child(even) { background: {{ cinza_claro }}; }
+
+  .leitura-rapida {
+    background: {{ cinza_claro }};
+    border-left: 3px solid {{ ciano }};
+    padding: 12px 16px;
+    margin-top: 14px;
+    font-size: 12.5px;
+    line-height: 1.6;
+  }
+  .leitura-rapida b { color: {{ navy }}; }
+
+  .rodape {
+    margin-top: 26px;
+    padding: 16px 40px 26px;
+    border-top: 1px solid {{ cinza_borda }};
+  }
+  .rodape .disclaimer {
+    font-size: 9px;
+    color: {{ cinza_texto }};
+    line-height: 1.55;
+    margin-bottom: 14px;
+  }
+  .rodape .disclaimer b { color: {{ navy }}; }
+  .rodape .logos { display: flex; justify-content: flex-end; }
+  .rodape .logos img { height: 22px; }
+</style>
+</head>
+<body>
+
+  {% if amostra %}
+  <div class="faixa-amostra">AMOSTRA — DADOS DE DEMONSTRAÇÃO (NÃO SÃO DADOS OFICIAIS DO BCB) — APENAS PARA VALIDAR O LAYOUT</div>
+  {% endif %}
+  <div class="cabecalho">
+    <img src="{{ logo_branco_uri }}" alt="Multiplica">
+    <div class="titulo">
+      <h1>DÓLAR x CDI</h1>
+      <p>Comparativo de rentabilidade acumulada — {{ mes_referencia }}</p>
+    </div>
+  </div>
+
+  <div class="conteudo">
+
+    <div class="bloco">
+    <div class="rotulo-secao">Sobre a análise</div>
+    <div class="texto">
+      Comparativo entre a variação cambial do dólar (USD/BRL) e o rendimento acumulado do
+      CDI, o principal indexador da renda fixa brasileira, em quatro janelas de tempo
+      (1, 5, 10 e 20 anos), com dados oficiais atualizados até {{ data_referencia_extenso }}.<br>
+      <strong>O CDI é calculado por capitalização diária composta (base 252 dias úteis);
+      o dólar, pela variação simples entre a cotação de início e a de fim de cada janela.</strong>
+    </div>
+    </div>
+
+    <div class="bloco">
+    <div class="rotulo-secao">Rentabilidade acumulada</div>
+    <div class="linha">
+      <div class="col-principal">
+        <table class="tabela-principal">
+          <thead>
+            <tr>
+              <th>&nbsp;</th>
+              {% for j in janelas %}<th>{{ j.rotulo }}</th>{% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="destaque">
+              <td>Dólar (USD/BRL)</td>
+              {% for j in janelas %}<td class="{{ 'neg' if j.retorno_dolar < 0 else '' }}">{{ j.retorno_dolar_fmt }}</td>{% endfor %}
+            </tr>
+            <tr>
+              <td>CDI</td>
+              {% for j in janelas %}<td class="{{ 'neg' if j.retorno_cdi < 0 else '' }}">{{ j.retorno_cdi_fmt }}</td>{% endfor %}
+            </tr>
+            <tr>
+              <td>CDI + {{ spread_fmt }} a.a.</td>
+              {% for j in janelas %}<td class="{{ 'neg' if j.retorno_cdi_spread < 0 else '' }}">{{ j.retorno_cdi_spread_fmt }}</td>{% endfor %}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="col-lateral">
+        <div class="caixa">
+          <div class="titulo-caixa">FONTES OFICIAIS</div>
+          <div class="item"><span class="rot">Dólar (USD/BRL)</span></div>
+          <div class="item"><span class="val" style="text-align:left; font-weight:500;">{{ fonte_dolar_nome }}</span></div>
+          <div class="item"><span class="rot">CDI</span></div>
+          <div class="item"><span class="val" style="text-align:left; font-weight:500;">{{ fonte_cdi_nome }}</span></div>
+          <div class="item"><span class="rot">Atualização</span><span class="val">Diária (dias úteis)</span></div>
+          <div class="item"><span class="rot">Última cotação</span><span class="val">{{ data_referencia_curta }}</span></div>
+          <div class="rodape-caixa">
+            Dados públicos, gratuitos e sem necessidade de assinatura — Sistema Gerenciador de
+            Séries Temporais (SGS) do Banco Central do Brasil.
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <div class="bloco">
+    <div class="rotulo-secao">Evolução acumulada no período</div>
+    <div class="grade-graficos">
+      {% for j in janelas %}
+      <img src="{{ j.grafico_uri }}" alt="Gráfico {{ j.rotulo }}">
+      {% endfor %}
+    </div>
+    </div>
+
+    <div class="bloco">
+    <div class="rotulo-secao">Comparativo por janela</div>
+    <div class="grafico-resumo">
+      <img src="{{ grafico_resumo_uri }}" alt="Comparativo acumulado por janela">
+    </div>
+    </div>
+
+    <div class="bloco">
+    <div class="rotulo-secao">Indicadores complementares — dólar (USD/BRL)</div>
+    <table class="tabela-indicadores">
+      <thead>
+        <tr>
+          <th>&nbsp;</th>
+          {% for j in janelas %}<th>{{ j.rotulo }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Volatilidade anualizada</td>
+          {% for j in janelas %}<td>{{ j.vol_fmt }}</td>{% endfor %}
+        </tr>
+        <tr>
+          <td>Maior alta em 1 dia</td>
+          {% for j in janelas %}<td>{{ j.alta_dia_fmt }}</td>{% endfor %}
+        </tr>
+        <tr>
+          <td>Maior queda em 1 dia</td>
+          {% for j in janelas %}<td class="neg">{{ j.queda_dia_fmt }}</td>{% endfor %}
+        </tr>
+        <tr>
+          <td>Maior recuo frente ao topo do período</td>
+          {% for j in janelas %}<td class="neg">{{ j.drawdown_fmt }}</td>{% endfor %}
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="leitura-rapida">
+      {% for j in janelas %}
+      <div><b>{{ j.rotulo }}:</b> {{ j.leitura }}</div>
+      {% endfor %}
+    </div>
+    </div>
+
+  </div>
+
+  <div class="rodape">
+    <div class="disclaimer">
+      <b>Aviso:</b> este material tem caráter exclusivamente informativo, elaborado a partir de
+      dados públicos do Banco Central do Brasil (Sistema Gerenciador de Séries Temporais — SGS,
+      séries 1 e 4391). Não constitui recomendação de investimento, oferta ou análise de
+      qualquer produto financeiro. Rentabilidade passada não representa garantia de
+      rentabilidade futura. O CDI é calculado por capitalização diária composta (base 252 dias
+      úteis); o dólar, pela variação simples da cotação PTAX-venda entre o início e o fim de
+      cada janela. Documento gerado automaticamente em {{ gerado_em }}.
+    </div>
+    <div class="logos">
+      <img src="{{ logo_navy_uri }}" alt="Multiplica">
+    </div>
+  </div>
+
+</body>
+</html>
