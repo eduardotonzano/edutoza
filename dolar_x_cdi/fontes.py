@@ -99,9 +99,16 @@ def _consultar_bcb(codigo: int, data_inicial: dt.date, data_final: dt.date) -> l
         "dataInicial": data_inicial.strftime("%d/%m/%Y"),
         "dataFinal": data_final.strftime("%d/%m/%Y"),
     }
+    # O gateway do BCB devolve 406 Not Acceptable para requisições sem um
+    # User-Agent "de navegador" (o padrão do requests, tipo "python-requests/x.y",
+    # é rejeitado). Um User-Agent comum resolve.
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; DolarXCDI/1.0; +https://github.com/eduardotonzano/edutoza)",
+        "Accept": "application/json",
+    }
     url = URL_SGS.format(codigo=codigo)
     try:
-        resp = requests.get(url, params=params, timeout=30)
+        resp = requests.get(url, params=params, headers=headers, timeout=30)
         resp.raise_for_status()
         dados = resp.json()
     except Exception as exc:  # rede indisponível, host recusou, JSON inválido...
