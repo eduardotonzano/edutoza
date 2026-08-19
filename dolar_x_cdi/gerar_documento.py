@@ -72,6 +72,26 @@ def _gerar(dolar: list[PontoSerie], cdi: list[PontoSerie], spread_aa: float,
                             caminho_saida=caminho_saida, amostra=amostra)
 
 
+def _diagnostico_cdi(cdi: list[PontoSerie]) -> None:
+    """Mostra amostras do CDI cru ao longo do tempo, pra ver se a escala dos
+    valores muda entre trechos antigos e recentes da série (o que já causou
+    número final errado numa versão anterior, mesmo com dado real do BCB)."""
+    if not cdi:
+        print("[diagnóstico CDI] série vazia.")
+        return
+    hoje = cdi[-1].data
+    marcos = [("mais antigo", cdi[0])]
+    for anos_atras in (15, 10, 5, 1):
+        alvo = hoje.replace(year=hoje.year - anos_atras) if hoje.month != 2 or hoje.day != 29 else hoje.replace(year=hoje.year - anos_atras, day=28)
+        candidato = next((p for p in cdi if p.data >= alvo), None)
+        if candidato:
+            marcos.append((f"~{anos_atras} anos atrás", candidato))
+    marcos.append(("mais recente", cdi[-1]))
+    print(f"[diagnóstico CDI] {len(cdi)} pontos, de {cdi[0].data} a {cdi[-1].data}")
+    for rotulo, p in marcos:
+        print(f"  {rotulo}: {p.data} = {p.valor}")
+
+
 def gerar_a_partir_do_bcb(spread_aa: float = 0.04, caminho_saida: Path | None = None) -> Path:
     """Busca dólar e CDI oficiais no Banco Central e gera o PDF. Levanta ErroFonteDados
     se o BCB estiver inacessível (sem internet, host fora do ar etc.)."""
@@ -79,6 +99,7 @@ def gerar_a_partir_do_bcb(spread_aa: float = 0.04, caminho_saida: Path | None = 
     inicio_busca = dt.date(hoje.year - 21, hoje.month, 1)
     dolar = carregar_serie(SERIE_DOLAR, inicio_busca)
     cdi = carregar_serie(SERIE_CDI, inicio_busca)
+    _diagnostico_cdi(cdi)
     return _gerar(dolar, cdi, spread_aa, amostra=False, caminho_saida=caminho_saida)
 
 
