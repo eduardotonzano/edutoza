@@ -9,9 +9,11 @@ gratuitas, sem chave de acesso:
   https://api.bcb.gov.br/dados/serie/bcdata.sgs.1/dados
 
 - CDI: série 4391 — "Taxa de juros - CDI anualizada base 252". Publicada
-  diariamente pelo BCB a partir dos dados da B3/CETIP, já anualizada
-  (% a.a., base 252 dias úteis) — mesma convenção usada para compor o
-  fator diário (1 + CDI)^(1/252).
+  diariamente pelo BCB a partir dos dados da B3/CETIP. Nominalmente
+  anualizada (% a.a., base 252 dias úteis), mas a documentação da série
+  no SGS é inconsistente com o que a API às vezes devolve — por isso
+  `calculo.py` detecta a convenção real pela ordem de grandeza dos
+  valores em vez de presumir (ver `_cdi_e_anualizado`).
   https://api.bcb.gov.br/dados/serie/bcdata.sgs.4391/dados
 
 Os dados baixados são gravados em cache local (CSV) em `cache/`, para que
