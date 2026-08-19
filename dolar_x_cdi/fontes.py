@@ -145,6 +145,27 @@ def _consultar_bcb(codigo: int, data_inicial: dt.date, data_final: dt.date) -> l
     return pontos
 
 
+def _janelas_de_ate_10_anos(data_inicial: dt.date, data_final: dt.date) -> list[tuple[dt.date, dt.date]]:
+    """Quebra [data_inicial, data_final] em pedaços de até 10 anos.
+
+    O SGS do BCB recusa (HTTP 406) consultas de séries diárias com janela
+    maior que 10 anos — descoberto pelo corpo da resposta de erro, não por
+    documentação. Isso é necessário sempre que a janela pedida (ex.: 20
+    anos, para as comparações de longo prazo) passa desse limite.
+    """
+    janelas = []
+    inicio = data_inicial
+    while inicio <= data_final:
+        try:
+            fim = dt.date(inicio.year + 10, inicio.month, inicio.day) - dt.timedelta(days=1)
+        except ValueError:  # 29/fev em ano não bissexto
+            fim = dt.date(inicio.year + 10, inicio.month, inicio.day - 1) - dt.timedelta(days=1)
+        fim = min(fim, data_final)
+        janelas.append((inicio, fim))
+        inicio = fim + dt.timedelta(days=1)
+    return janelas
+
+
 def carregar_serie(
     codigo: int,
     data_inicial: dt.date,
@@ -153,15 +174,17 @@ def carregar_serie(
 ) -> list[PontoSerie]:
     """Carrega uma série do SGS/BCB cobrindo [data_inicial, data_final].
 
-    Tenta a API oficial primeiro; se falhar (sem rede, host bloqueado etc.)
-    e houver cache local cobrindo o período, usa o cache — sinalizando o
-    fato para quem chamou através do valor de retorno de `origem`.
+    Tenta a API oficial primeiro (em pedaços de até 10 anos — o limite do
+    BCB para séries diárias); se falhar (sem rede, host bloqueado etc.) e
+    houver cache local cobrindo o período, usa o cache.
     """
     data_final = data_final or dt.date.today()
     cache = _ler_cache(codigo) if permitir_cache else []
 
     try:
-        novos = _consultar_bcb(codigo, data_inicial, data_final)
+        novos: list[PontoSerie] = []
+        for inicio_janela, fim_janela in _janelas_de_ate_10_anos(data_inicial, data_final):
+            novos.extend(_consultar_bcb(codigo, inicio_janela, fim_janela))
         if not novos:
             raise ErroFonteDados(f"BCB SGS série {codigo} retornou vazio para o período pedido.")
         combinado = _mesclar(cache, novos)
