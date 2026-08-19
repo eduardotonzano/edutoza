@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import csv
 import datetime as dt
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -99,33 +100,37 @@ def _consultar_bcb(codigo: int, data_inicial: dt.date, data_final: dt.date) -> l
         "dataInicial": data_inicial.strftime("%d/%m/%Y"),
         "dataFinal": data_final.strftime("%d/%m/%Y"),
     }
-    # O gateway do BCB costuma devolver 406 Not Acceptable pra requisições que não
-    # parecem vir de navegador. Duas causas conhecidas, que tentamos contornar em
-    # sequência: (1) o requests pede compressão Brotli ("Accept-Encoding: br") quando
-    # a lib brotli está instalada (é dependência do weasyprint) e o gateway não lida
-    # bem com isso; (2) o User-Agent/Accept não parecem "de navegador". Se a 1ª
-    # tentativa (headers de navegador completos) falhar com 406, tenta de novo só
-    # forçando Accept-Encoding sem Brotli.
-    tentativas_headers = [
-        {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                          "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Encoding": "gzip, deflate",
-            "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
-        },
-        {"Accept-Encoding": "gzip, deflate"},
-    ]
+    # O 406 do gateway do BCB não mudou com nenhuma variação de headers testada até
+    # agora — o mais provável é bloqueio (intermitente) de IPs de datacenter, o
+    # mesmo comportamento já visto com a CVM neste projeto (ver README). Contra
+    # isso, headers sozinhos não resolvem; o que ajuda é tentar de novo (o runner
+    # do GitHub Actions pode sair por um IP diferente numa nova tentativa) e, se
+    # persistir, mostrar o corpo da resposta do BCB — que deve indicar o motivo
+    # real — em vez de só repetir "406 Not Acceptable" às cegas.
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Encoding": "gzip, deflate",
+    }
     url = URL_SGS.format(codigo=codigo)
+    tentativas = 4
+    atrasos = [3, 6, 12]  # segundos entre tentativas (backoff)
     ultimo_erro: Exception | None = None
-    for headers in tentativas_headers:
+    for tentativa in range(tentativas):
         try:
             resp = requests.get(url, params=params, headers=headers, timeout=30)
-            resp.raise_for_status()
+            if resp.status_code != 200:
+                corpo = resp.text[:300].replace("\n", " ")
+                raise ErroFonteDados(
+                    f"BCB SGS série {codigo} devolveu HTTP {resp.status_code}: {corpo!r}"
+                )
             dados = resp.json()
             break
         except Exception as exc:  # rede indisponível, host recusou, JSON inválido...
             ultimo_erro = exc
+            if tentativa < tentativas - 1:
+                time.sleep(atrasos[tentativa])
     else:
         raise ErroFonteDados(f"Falha ao consultar BCB SGS série {codigo}: {ultimo_erro}") from ultimo_erro
 
