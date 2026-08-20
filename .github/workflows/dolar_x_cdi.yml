@@ -18,6 +18,10 @@ on:
         description: "E-mail de destino (deixe em branco pro padrão)"
         required: false
         default: ""
+      data_fim:
+        description: "Data final desejada para as janelas, AAAA-MM-DD (deixe em branco pro dado mais recente)"
+        required: false
+        default: ""
 
 jobs:
   gerar:
@@ -38,9 +42,32 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r dolar_x_cdi/requirements.txt
 
+      # Data final desejada (vem do formulário web ou de quem roda manualmente); validada
+      # aqui (formato AAAA-MM-DD) antes de ir pro passo de geração — em variável de ambiente,
+      # não colada direto no script, pra não correr risco de injeção de comando vindo do
+      # texto livre que chega pelo formulário público.
+      - name: Validar data final desejada
+        id: datafim
+        env:
+          DATA_BRUTA: ${{ github.event.inputs.data_fim }}
+        run: |
+          if echo "$DATA_BRUTA" | grep -Eq '^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$'; then
+            echo "data=$DATA_BRUTA" >> "$GITHUB_OUTPUT"
+          else
+            echo "data=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Gerar o documento (dados oficiais do Banco Central)
         working-directory: dolar_x_cdi
-        run: python gerar_documento.py --spread "${{ github.event.inputs.spread || '0.04' }}"
+        env:
+          SPREAD: ${{ github.event.inputs.spread || '0.04' }}
+          DATA_FIM: ${{ steps.datafim.outputs.data }}
+        run: |
+          if [ -n "$DATA_FIM" ]; then
+            python gerar_documento.py --spread "$SPREAD" --data-fim "$DATA_FIM"
+          else
+            python gerar_documento.py --spread "$SPREAD"
+          fi
 
       - name: Descobrir o nome do PDF gerado
         id: pdf
@@ -59,10 +86,11 @@ jobs:
       # caindo no endereço padrão se vier vazio ou malformado.
       - name: Definir e-mail de destino
         id: destino
+        env:
+          EMAIL_BRUTO: ${{ github.event.inputs.email_destino }}
         run: |
-          EMAIL="${{ github.event.inputs.email_destino }}"
-          if echo "$EMAIL" | grep -Eq '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'; then
-            echo "email=$EMAIL" >> "$GITHUB_OUTPUT"
+          if echo "$EMAIL_BRUTO" | grep -Eq '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'; then
+            echo "email=$EMAIL_BRUTO" >> "$GITHUB_OUTPUT"
           else
             echo "email=eduardotonzano@gmail.com" >> "$GITHUB_OUTPUT"
           fi
