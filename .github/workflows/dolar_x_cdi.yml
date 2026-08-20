@@ -1,9 +1,10 @@
 name: Documento Dólar x CDI
 
 # Gera o PDF "Dólar x CDI" (rentabilidade acumulada em 1/5/10/20 anos, com dados oficiais
-# do Banco Central) e manda por e-mail. Roda sob demanda (Actions -> Run workflow) ou uma
-# vez por mês (dia 1) — como as janelas são de médio/longo prazo, não faz sentido rodar
-# todo dia como o monitor de notícias.
+# do Banco Central) e manda por e-mail. Roda sob demanda (Actions -> Run workflow), uma
+# vez por mês (dia 1), ou disparado pelo formulário web (ver dolar_x_cdi/pedido_web/) —
+# como as janelas são de médio/longo prazo, não faz sentido rodar todo dia como o monitor
+# de notícias.
 on:
   schedule:
     - cron: "0 12 1 * *"   # dia 1 de cada mês, 12:00 UTC (09:00 em Brasília)
@@ -13,6 +14,10 @@ on:
         description: "Spread anual do 'CDI + X%' de referência (ex.: 0.04 para CDI + 4%)"
         required: false
         default: "0.04"
+      email_destino:
+        description: "E-mail de destino (deixe em branco pro padrão)"
+        required: false
+        default: ""
 
 jobs:
   gerar:
@@ -47,6 +52,19 @@ jobs:
           path: dolar_x_cdi/output/*.pdf
           retention-days: 90
 
+      # O e-mail de destino vem do formulário web (dolar_x_cdi/pedido_web/) ou de quem
+      # roda manualmente; validado aqui (formato simples) antes de ir pro passo de envio,
+      # caindo no endereço padrão se vier vazio ou malformado.
+      - name: Definir e-mail de destino
+        id: destino
+        run: |
+          EMAIL="${{ github.event.inputs.email_destino }}"
+          if echo "$EMAIL" | grep -Eq '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'; then
+            echo "email=$EMAIL" >> "$GITHUB_OUTPUT"
+          else
+            echo "email=eduardotonzano@gmail.com" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Enviar por e-mail
         if: ${{ env.MAIL_USERNAME != '' && env.MAIL_PASSWORD != '' }}
         env:
@@ -60,9 +78,9 @@ jobs:
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
           subject: "Dólar x CDI - documento atualizado"
-          to: eduardotonzano@gmail.com
+          to: ${{ steps.destino.outputs.email }}
           from: Dólar x CDI <${{ secrets.MAIL_USERNAME }}>
           body: |
             Segue em anexo o documento "Dólar x CDI" atualizado, com dados oficiais do
-            Banco Central do Brasil (PTAX e CDI anualizado) para as janelas de 1, 5, 10 e 20 anos.
+            Banco Central do Brasil (PTAX e CDI) para as janelas de 1, 5, 10 e 20 anos.
           attachments: ${{ steps.pdf.outputs.caminho }}

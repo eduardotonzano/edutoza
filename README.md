@@ -240,6 +240,19 @@ o mesmo login de app do Gmail já usado para enviar os e-mails do monitor de not
 > 5 pedidos processados por execução (a cada 15 min), pra não sobrecarregar em caso de
 > uso indevido.
 
+## Pedir por formulário web — digita o e-mail, aperta um botão, pronto
+Ainda mais simples que o e-mail: uma página com um campo de e-mail e um botão. A pessoa
+digita o e-mail, clica em "Receber o PDF", e o documento chega na caixa dela em alguns
+minutos — sem precisar escrever e-mail nenhum, sem conta no GitHub.
+
+Como funciona (`dolar_x_cdi/pedido_web/`): um Worker da Cloudflare serve a página e, no
+clique do botão, dispara o mesmo workflow do GitHub Actions que já gera o PDF, passando o
+e-mail digitado como destino. A credencial do GitHub fica só no Worker — nunca aparece no
+navegador de quem usa a página. Tem limite de 1 pedido a cada 3 minutos por pessoa/IP.
+
+**Setup** (uma vez só, precisa de uma conta Cloudflare gratuita): ver o passo a passo
+completo em `dolar_x_cdi/pedido_web/README.md`.
+
 ## Estrutura
 - `fontes.py` — busca as duas séries no BCB (com cache local em `cache/`, para não
   depender de internet toda vez e continuar funcionando com o último dado se o BCB
@@ -253,6 +266,8 @@ o mesmo login de app do Gmail já usado para enviar os e-mails do monitor de not
   funções reutilizáveis `gerar_a_partir_do_bcb` / `gerar_a_partir_de_amostra`.
 - `verificar_pedidos.py` — lê pedidos por e-mail (IMAP) e responde com o PDF (ver seção
   "Pedir por e-mail" acima).
+- `pedido_web/` — formulário web (Worker da Cloudflare) que dispara a geração a partir de
+  um e-mail digitado num botão (ver seção "Pedir por formulário web" acima).
 - `amostra/` — dados históricos (2006–2026) que já vinham na planilha original
   (Bloomberg), usados **só** no modo `--amostra` para testar o layout sem internet.
   Nunca usados no modo normal (que sempre busca o dado oficial mais recente no BCB).
