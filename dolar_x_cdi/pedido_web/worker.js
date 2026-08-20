@@ -62,10 +62,10 @@ async function tratarPedido(request, env) {
     );
   }
 
-  const ok = await dispararWorkflow(env, email);
-  if (!ok) {
+  const resultado = await dispararWorkflow(env, email);
+  if (!resultado.ok) {
     return respostaErro(
-      "Não foi possível iniciar a geração agora. Tente novamente em instantes.",
+      `Não foi possível iniciar a geração agora (${resultado.motivo}). Tente novamente em instantes.`,
       502
     );
   }
@@ -95,26 +95,36 @@ async function marcarPedido(env, chaves) {
 }
 
 async function dispararWorkflow(env, email) {
-  if (!env.GITHUB_TOKEN) return false;
+  if (!env.GITHUB_TOKEN) return { ok: false, motivo: "GITHUB_TOKEN não configurado no Worker" };
 
-  const resp = await fetch(
-    `https://api.github.com/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW_FILE}/dispatches`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.GITHUB_TOKEN}`,
-        Accept: "application/vnd.github+json",
-        "Content-Type": "application/json",
-        "User-Agent": "dolar-x-cdi-worker",
-      },
-      body: JSON.stringify({
-        ref: REF,
-        inputs: { email_destino: email },
-      }),
-    }
-  );
+  let resp;
+  try {
+    resp = await fetch(
+      `https://api.github.com/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW_FILE}/dispatches`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+          Accept: "application/vnd.github+json",
+          "Content-Type": "application/json",
+          "User-Agent": "dolar-x-cdi-worker",
+        },
+        body: JSON.stringify({
+          ref: REF,
+          inputs: { email_destino: email },
+        }),
+      }
+    );
+  } catch (exc) {
+    return { ok: false, motivo: `falha de rede: ${exc}` };
+  }
 
-  return resp.status === 204;
+  if (resp.status === 204) {
+    return { ok: true };
+  }
+
+  const corpo = await resp.text().catch(() => "");
+  return { ok: false, motivo: `GitHub respondeu ${resp.status}: ${corpo.slice(0, 200)}` };
 }
 
 function respostaErro(mensagem, status) {
