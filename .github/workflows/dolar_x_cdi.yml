@@ -30,6 +30,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: dolar_x_cdi/requirements.txt
 
       - name: Instalar dependências
         run: |
