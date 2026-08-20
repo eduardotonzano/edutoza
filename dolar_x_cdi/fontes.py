@@ -166,6 +166,22 @@ def _janelas_de_ate_10_anos(data_inicial: dt.date, data_final: dt.date) -> list[
     return janelas
 
 
+def _remover_mes_corrente_incompleto(codigo: int, pontos: list[PontoSerie]) -> list[PontoSerie]:
+    """A série 4391 (CDI) publica um ponto "ao vivo" para o mês em andamento —
+    ele vai crescendo dia a dia (é o acumulado só até a data da consulta, não o
+    mês fechado) até o mês virar de vez. Usar esse ponto como se fosse um mês
+    completo subestima muito o acumulado (ex.: consultado no dia 20, um mês que
+    normalmente fecha em ~1,1% aparece com ~0,68%). Descarta o último ponto se
+    ele cair no mês corrente — mantém só meses já fechados.
+    """
+    if codigo != SERIE_CDI or not pontos:
+        return pontos
+    hoje = dt.date.today()
+    if pontos[-1].data.year == hoje.year and pontos[-1].data.month == hoje.month:
+        return pontos[:-1]
+    return pontos
+
+
 def carregar_serie(
     codigo: int,
     data_inicial: dt.date,
@@ -189,9 +205,11 @@ def carregar_serie(
             raise ErroFonteDados(f"BCB SGS série {codigo} retornou vazio para o período pedido.")
         combinado = _mesclar(cache, novos)
         _gravar_cache(codigo, combinado)
-        return [p for p in combinado if data_inicial <= p.data <= data_final]
+        resultado = [p for p in combinado if data_inicial <= p.data <= data_final]
     except ErroFonteDados:
         cobertura = [p for p in cache if data_inicial <= p.data <= data_final]
-        if cobertura:
-            return cobertura
-        raise
+        if not cobertura:
+            raise
+        resultado = cobertura
+
+    return _remover_mes_corrente_incompleto(codigo, resultado)

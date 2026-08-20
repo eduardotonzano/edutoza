@@ -47,8 +47,13 @@ def _carregar_csv_amostra(nome: str) -> list[PontoSerie]:
 
 
 def _gerar(dolar: list[PontoSerie], cdi: list[PontoSerie], spread_aa: float,
-           amostra: bool, caminho_saida: Path | None) -> Path:
+           amostra: bool, caminho_saida: Path | None,
+           data_fim_desejada: dt.date | None = None) -> Path:
     data_fim = min(dolar[-1].data, cdi[-1].data)
+    if data_fim_desejada is not None:
+        # Nunca passa do último dado real disponível — se a pessoa escolher uma
+        # data futura (ou um dia sem publicação ainda), cai pro dado mais recente.
+        data_fim = min(data_fim, data_fim_desejada)
 
     janelas = []
     for anos in JANELAS_ANOS:
@@ -63,6 +68,17 @@ def _gerar(dolar: list[PontoSerie], cdi: list[PontoSerie], spread_aa: float,
         raise RuntimeError("nenhuma janela pôde ser calculada — dados insuficientes.")
 
     return gerar_documento(janelas, spread_aa, caminho_saida=caminho_saida, amostra=amostra)
+
+
+def _validar_data_fim(bruta: str | None) -> dt.date | None:
+    """Converte a string "AAAA-MM-DD" (formato do <input type=date>) numa data.
+    Levanta ValueError com mensagem amigável se o formato for inválido."""
+    if not bruta:
+        return None
+    try:
+        return dt.date.fromisoformat(bruta.strip())
+    except ValueError:
+        raise ValueError(f"data final inválida: {bruta!r} (esperado AAAA-MM-DD)") from None
 
 
 def _diagnostico_cdi(cdi: list[PontoSerie]) -> None:
@@ -85,22 +101,30 @@ def _diagnostico_cdi(cdi: list[PontoSerie]) -> None:
         print(f"  {rotulo}: {p.data} = {p.valor}")
 
 
-def gerar_a_partir_do_bcb(spread_aa: float = 0.04, caminho_saida: Path | None = None) -> Path:
+def gerar_a_partir_do_bcb(spread_aa: float = 0.04, caminho_saida: Path | None = None,
+                          data_fim_desejada: dt.date | None = None) -> Path:
     """Busca dólar e CDI oficiais no Banco Central e gera o PDF. Levanta ErroFonteDados
-    se o BCB estiver inacessível (sem internet, host fora do ar etc.)."""
-    hoje = dt.date.today()
-    inicio_busca = dt.date(hoje.year - 21, hoje.month, 1)
-    dolar = carregar_serie(SERIE_DOLAR, inicio_busca)
-    cdi = carregar_serie(SERIE_CDI, inicio_busca)
+    se o BCB estiver inacessível (sem internet, host fora do ar etc.).
+
+    `data_fim_desejada`, se informada, faz as janelas (1/5/10/20 anos) terminarem
+    nessa data em vez de na mais recente disponível (ex.: pedido pelo formulário
+    web, onde a pessoa escolhe a data final da análise)."""
+    referencia = data_fim_desejada or dt.date.today()
+    inicio_busca = dt.date(referencia.year - 21, referencia.month, 1)
+    dolar = carregar_serie(SERIE_DOLAR, inicio_busca, data_final=data_fim_desejada)
+    cdi = carregar_serie(SERIE_CDI, inicio_busca, data_final=data_fim_desejada)
     _diagnostico_cdi(cdi)
-    return _gerar(dolar, cdi, spread_aa, amostra=False, caminho_saida=caminho_saida)
+    return _gerar(dolar, cdi, spread_aa, amostra=False, caminho_saida=caminho_saida,
+                  data_fim_desejada=data_fim_desejada)
 
 
-def gerar_a_partir_de_amostra(spread_aa: float = 0.04, caminho_saida: Path | None = None) -> Path:
+def gerar_a_partir_de_amostra(spread_aa: float = 0.04, caminho_saida: Path | None = None,
+                              data_fim_desejada: dt.date | None = None) -> Path:
     """Gera o PDF com os dados de demonstração locais (sem consultar o BCB)."""
     dolar = _carregar_csv_amostra("dolar_amostra.csv")
     cdi = _carregar_csv_amostra("cdi_amostra.csv")
-    return _gerar(dolar, cdi, spread_aa, amostra=True, caminho_saida=caminho_saida)
+    return _gerar(dolar, cdi, spread_aa, amostra=True, caminho_saida=caminho_saida,
+                  data_fim_desejada=data_fim_desejada)
 
 
 def main() -> int:
@@ -110,15 +134,24 @@ def main() -> int:
     parser.add_argument("--spread", type=float, default=0.04,
                          help="spread anual do 'CDI + X%%' de referência, ex.: 0.04 para CDI + 4%% (padrão: 0.04)")
     parser.add_argument("--saida", type=Path, default=None, help="caminho do PDF de saída (padrão: output/Dolar_x_CDI_<data>.pdf)")
+    parser.add_argument("--data-fim", type=str, default=None,
+                         help="data final desejada para as janelas, formato AAAA-MM-DD "
+                              "(padrão: dado mais recente disponível)")
     args = parser.parse_args()
+
+    try:
+        data_fim_desejada = _validar_data_fim(args.data_fim)
+    except ValueError as exc:
+        print(f"ERRO: {exc}")
+        return 1
 
     try:
         if args.amostra:
             print("[amostra] usando dados locais de demonstração (não são dados oficiais do BCB).")
-            caminho = gerar_a_partir_de_amostra(args.spread, args.saida)
+            caminho = gerar_a_partir_de_amostra(args.spread, args.saida, data_fim_desejada)
         else:
             print("Consultando o Banco Central do Brasil (SGS)...")
-            caminho = gerar_a_partir_do_bcb(args.spread, args.saida)
+            caminho = gerar_a_partir_do_bcb(args.spread, args.saida, data_fim_desejada)
     except ErroFonteDados as exc:
         print(f"\nERRO: não foi possível obter os dados oficiais do BCB.\n  {exc}\n")
         print("Isso normalmente significa que este ambiente não tem acesso à internet")
