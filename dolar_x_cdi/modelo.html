@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <style>
   @page {
-    size: 1000px 2000px;
+    size: 1000px 1600px;
     margin: 0;
   }
   * { box-sizing: border-box; }
@@ -132,42 +132,9 @@
   .grade-graficos {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 6px 18px;
+    gap: 22px 18px;
   }
   .grade-graficos img { width: 100%; display: block; }
-
-  .grafico-resumo img { width: 100%; display: block; }
-
-  table.tabela-indicadores {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12px;
-  }
-  table.tabela-indicadores thead th {
-    background: {{ navy }};
-    color: {{ branco }};
-    font-weight: 600;
-    padding: 9px 10px;
-    text-align: right;
-  }
-  table.tabela-indicadores thead th:first-child { text-align: left; }
-  table.tabela-indicadores tbody td {
-    padding: 9px 10px;
-    text-align: right;
-    border-bottom: 1px solid {{ cinza_borda }};
-  }
-  table.tabela-indicadores tbody td:first-child { text-align: left; font-weight: 600; }
-  table.tabela-indicadores tbody tr:nth-child(even) { background: {{ cinza_claro }}; }
-
-  .leitura-rapida {
-    background: {{ cinza_claro }};
-    border-left: 3px solid {{ ciano }};
-    padding: 12px 16px;
-    margin-top: 14px;
-    font-size: 12.5px;
-    line-height: 1.6;
-  }
-  .leitura-rapida b { color: {{ navy }}; }
 
   .rodape {
     margin-top: 26px;
@@ -261,49 +228,6 @@
     <div class="grade-graficos">
       {% for j in janelas %}
       <img src="{{ j.grafico_uri }}" alt="Gráfico {{ j.rotulo }}">
-      {% endfor %}
-    </div>
-    </div>
-
-    <div class="bloco">
-    <div class="rotulo-secao">Comparativo por janela</div>
-    <div class="grafico-resumo">
-      <img src="{{ grafico_resumo_uri }}" alt="Comparativo acumulado por janela">
-    </div>
-    </div>
-
-    <div class="bloco">
-    <div class="rotulo-secao">Indicadores complementares — dólar (USD/BRL)</div>
-    <table class="tabela-indicadores">
-      <thead>
-        <tr>
-          <th>&nbsp;</th>
-          {% for j in janelas %}<th>{{ j.rotulo }}</th>{% endfor %}
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Volatilidade anualizada</td>
-          {% for j in janelas %}<td>{{ j.vol_fmt }}</td>{% endfor %}
-        </tr>
-        <tr>
-          <td>Maior alta em 1 dia</td>
-          {% for j in janelas %}<td>{{ j.alta_dia_fmt }}</td>{% endfor %}
-        </tr>
-        <tr>
-          <td>Maior queda em 1 dia</td>
-          {% for j in janelas %}<td class="neg">{{ j.queda_dia_fmt }}</td>{% endfor %}
-        </tr>
-        <tr>
-          <td>Maior recuo frente ao topo do período</td>
-          {% for j in janelas %}<td class="neg">{{ j.drawdown_fmt }}</td>{% endfor %}
-        </tr>
-      </tbody>
-    </table>
-
-    <div class="leitura-rapida">
-      {% for j in janelas %}
-      <div><b>{{ j.rotulo }}:</b> {{ j.leitura }}</div>
       {% endfor %}
     </div>
     </div>

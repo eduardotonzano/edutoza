@@ -51,7 +51,6 @@ def _gerar(dolar: list[PontoSerie], cdi: list[PontoSerie], spread_aa: float,
     data_fim = min(dolar[-1].data, cdi[-1].data)
 
     janelas = []
-    series_dolar_por_janela = {}
     for anos in JANELAS_ANOS:
         rotulo = f"{anos} ano" + ("" if anos == 1 else "s")
         resultado = calcular_janela(rotulo, anos, dolar, cdi, data_fim, spread_aa=spread_aa)
@@ -59,17 +58,11 @@ def _gerar(dolar: list[PontoSerie], cdi: list[PontoSerie], spread_aa: float,
             print(f"[aviso] dados insuficientes para a janela de {anos} anos — pulando.")
             continue
         janelas.append(resultado)
-        try:
-            data_alvo = dt.date(data_fim.year - anos, data_fim.month, data_fim.day)
-        except ValueError:
-            data_alvo = dt.date(data_fim.year - anos, data_fim.month, data_fim.day - 1)
-        series_dolar_por_janela[rotulo] = [p for p in dolar if data_alvo <= p.data <= data_fim]
 
     if not janelas:
         raise RuntimeError("nenhuma janela pôde ser calculada — dados insuficientes.")
 
-    return gerar_documento(janelas, series_dolar_por_janela, spread_aa,
-                            caminho_saida=caminho_saida, amostra=amostra)
+    return gerar_documento(janelas, spread_aa, caminho_saida=caminho_saida, amostra=amostra)
 
 
 def _diagnostico_cdi(cdi: list[PontoSerie]) -> None:

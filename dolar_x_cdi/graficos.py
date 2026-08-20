@@ -32,7 +32,7 @@ def _fmt_pct_label(v: float) -> str:
 
 def grafico_janela(janela: JanelaResultado, caminho_saida: Path, mostrar_spread: bool = True) -> None:
     """Um gráfico de linha: rentabilidade acumulada do Dólar x CDI (x CDI+spread) na janela."""
-    fig, ax = plt.subplots(figsize=(5.6, 3.25), dpi=200)
+    fig, ax = plt.subplots(figsize=(5.8, 4.6), dpi=200)
 
     xs_d = [d for d, _ in janela.serie_dolar]
     ys_d = [v for _, v in janela.serie_dolar]
@@ -50,15 +50,23 @@ def grafico_janela(janela: JanelaResultado, caminho_saida: Path, mostrar_spread:
 
     ax.axhline(0, color=CINZA_BORDA, linewidth=1, zorder=1)
 
-    # rótulo do valor final de cada linha
+    # Rótulo do valor final de cada linha. As três linhas terminam bem perto
+    # umas das outras (mesma data final), então em vez de um deslocamento
+    # vertical fixo por série — que gruda os textos quando a ordem das linhas
+    # muda de gráfico pra gráfico —, ordena pelo valor final e empilha de
+    # cima pra baixo, sempre na mesma ordem em que as linhas aparecem no eixo.
+    candidatos = []
     if ys_d:
-        ax.annotate(_fmt_pct_label(ys_d[-1]), (xs_d[-1], ys_d[-1]),
-                     textcoords="offset points", xytext=(4, 2), fontsize=8,
-                     color=CORES_GRAFICO["dolar"], fontweight="bold", ha="left")
+        candidatos.append((ys_d[-1], xs_d[-1], CORES_GRAFICO["dolar"]))
     if ys_c:
-        ax.annotate(_fmt_pct_label(ys_c[-1]), (xs_c[-1], ys_c[-1]),
-                     textcoords="offset points", xytext=(4, -10), fontsize=8,
-                     color=CORES_GRAFICO["cdi"], fontweight="bold", ha="left")
+        candidatos.append((ys_c[-1], xs_c[-1], CORES_GRAFICO["cdi"]))
+    if mostrar_spread and janela.serie_cdi_spread:
+        candidatos.append((ys_s[-1], xs_s[-1], CORES_GRAFICO["cdi_spread"]))
+
+    for posicao, (valor, x, cor) in enumerate(sorted(candidatos, key=lambda c: -c[0])):
+        ax.annotate(_fmt_pct_label(valor), (x, valor),
+                     textcoords="offset points", xytext=(4, 2 - posicao * 11), fontsize=8,
+                     color=cor, fontweight="bold", ha="left")
 
     ax.set_title(janela.rotulo, fontsize=12, fontweight="bold", color=NAVY, loc="left", pad=10)
     ax.yaxis.set_major_formatter(FuncFormatter(_fmt_pct))
@@ -67,58 +75,10 @@ def grafico_janela(janela: JanelaResultado, caminho_saida: Path, mostrar_spread:
     ax.tick_params(labelsize=8)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    ax.margins(x=0.08)
+    ax.margins(x=0.1)
     ax.legend(loc="upper center", fontsize=7.5, frameon=False, ncol=3,
               bbox_to_anchor=(0.5, -0.16))
 
     fig.tight_layout(rect=(0, 0.04, 1, 1))
-    fig.savefig(caminho_saida, transparent=True)
-    plt.close(fig)
-
-
-def grafico_resumo_barras(janelas: list[JanelaResultado], caminho_saida: Path) -> None:
-    """Gráfico de barras horizontais comparando o retorno acumulado por janela."""
-    fig, ax = plt.subplots(figsize=(11.6, 2.6), dpi=200)
-
-    rotulos = [j.rotulo for j in janelas]
-    dolar = [j.retorno_dolar for j in janelas]
-    cdi = [j.retorno_cdi for j in janelas]
-
-    y = range(len(janelas))
-    altura = 0.32
-
-    barras_d = ax.barh([i + altura / 2 for i in y], dolar, height=altura,
-                        color=CORES_GRAFICO["dolar"], label="Dólar (USD/BRL)")
-    barras_c = ax.barh([i - altura / 2 for i in y], cdi, height=altura,
-                        color=CORES_GRAFICO["cdi"], label="CDI")
-
-    for barras in (barras_d, barras_c):
-        for b in barras:
-            largura = b.get_width()
-            cor = CINZA_TEXTO
-            ax.annotate(_fmt_pct_label(largura),
-                        (largura, b.get_y() + b.get_height() / 2),
-                        textcoords="offset points",
-                        xytext=(6 if largura >= 0 else -6, 0),
-                        va="center", ha="left" if largura >= 0 else "right",
-                        fontsize=8.5, color=cor, fontweight="bold")
-
-    ax.set_yticks(list(y))
-    ax.set_yticklabels(rotulos, fontsize=9.5)
-    ax.axvline(0, color=NAVY, linewidth=1)
-    ax.xaxis.set_major_formatter(FuncFormatter(_fmt_pct))
-    ax.tick_params(axis="x", labelsize=8)
-    ax.tick_params(axis="y", pad=8)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_visible(False)
-    # Espaço extra nas duas pontas: sem isso, o rótulo de valor de uma barra
-    # negativa curta (ex.: dólar em -8%, numa janela onde o eixo vai até 600%
-    # por causa do CDI) fica colado no rótulo da categoria à esquerda.
-    ax.margins(x=0.22)
-    ax.invert_yaxis()
-    ax.legend(loc="upper center", fontsize=8.5, frameon=False, ncol=2, bbox_to_anchor=(0.5, 1.28))
-
-    fig.tight_layout()
     fig.savefig(caminho_saida, transparent=True)
     plt.close(fig)
