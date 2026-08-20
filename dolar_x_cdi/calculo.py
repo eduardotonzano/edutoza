@@ -19,8 +19,6 @@ from dataclasses import dataclass
 
 from fontes import PontoSerie
 
-DIAS_UTEIS_ANO = 252
-
 
 @dataclass
 class JanelaResultado:
@@ -97,7 +95,6 @@ def calcular_janela(
     except ValueError:  # 29/fev em ano não bissexto
         data_alvo_inicio = dt.date(data_fim.year - anos, data_fim.month, data_fim.day - 1)
 
-    d_janela = _corta_janela(dolar, data_alvo_inicio, data_fim)
     c_janela = _corta_janela(cdi, data_alvo_inicio, data_fim)
     # O corte acima é inclusivo nas duas pontas; com dado mensal isso pega um mês
     # a mais do que o pedido (ex.: 13 meses pra janela de "1 ano"), porque o ponto
@@ -106,7 +103,16 @@ def calcular_janela(
     max_pontos_cdi = anos * MESES_ANO
     if len(c_janela) > max_pontos_cdi:
         c_janela = c_janela[-max_pontos_cdi:]
-    if len(d_janela) < 2 or len(c_janela) < 2:
+    if len(c_janela) < 2:
+        return None
+
+    # O dólar (diário) começa exatamente em data_alvo_inicio, mas o CDI (mensal,
+    # depois do corte acima) só tem seu primeiro ponto um pouco depois — sem
+    # alinhar os dois, a linha do dólar no gráfico "nasce" antes da linha do CDI.
+    # Ancora o início do dólar na mesma data do primeiro ponto do CDI já cortado,
+    # pra as duas séries começarem juntas (e cobrirem o mesmo período de verdade).
+    d_janela = _corta_janela(dolar, c_janela[0].data, data_fim)
+    if len(d_janela) < 2:
         return None
 
     serie_dolar = _serie_acumulada_dolar(d_janela)
@@ -125,33 +131,3 @@ def calcular_janela(
         serie_cdi=serie_cdi,
         serie_cdi_spread=serie_cdi_spread,
     )
-
-
-def indicadores_dolar(pontos: list[PontoSerie]) -> dict:
-    """Indicadores complementares sobre a série do dólar em uma janela."""
-    if len(pontos) < 2:
-        return {}
-    retornos_diarios = []
-    for anterior, atual in zip(pontos, pontos[1:]):
-        retornos_diarios.append(atual.valor / anterior.valor - 1)
-
-    media = sum(retornos_diarios) / len(retornos_diarios)
-    variancia = sum((r - media) ** 2 for r in retornos_diarios) / max(1, len(retornos_diarios) - 1)
-    vol_anualizada = (variancia ** 0.5) * (DIAS_UTEIS_ANO ** 0.5) * 100
-
-    maior_alta_dia = max(retornos_diarios) * 100
-    maior_queda_dia = min(retornos_diarios) * 100
-
-    pico = pontos[0].valor
-    maior_drawdown = 0.0
-    for p in pontos:
-        pico = max(pico, p.valor)
-        dd = (p.valor / pico - 1) * 100
-        maior_drawdown = min(maior_drawdown, dd)
-
-    return {
-        "volatilidade_anualizada": vol_anualizada,
-        "maior_alta_dia": maior_alta_dia,
-        "maior_queda_dia": maior_queda_dia,
-        "maior_queda_do_topo": maior_drawdown,
-    }

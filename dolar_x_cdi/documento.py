@@ -8,9 +8,9 @@ from pathlib import Path
 from jinja2 import Template
 from weasyprint import HTML
 
-from calculo import JanelaResultado, indicadores_dolar
+from calculo import JanelaResultado
 from fontes import FONTE_DOLAR_NOME, FONTE_CDI_NOME
-from graficos import grafico_janela, grafico_resumo_barras
+from graficos import grafico_janela
 import estilo
 
 PASTA_BASE = Path(__file__).parent
@@ -45,21 +45,8 @@ def _uri_arquivo(caminho: Path) -> str:
     return f"data:image/{tipo};base64,{b64}"
 
 
-def _leitura_rapida(j: JanelaResultado) -> str:
-    dif = j.retorno_dolar - j.retorno_cdi
-    if j.retorno_dolar > j.retorno_cdi:
-        vencedor = "o dólar superou o CDI"
-    else:
-        vencedor = "o CDI superou o dólar"
-    return (
-        f"no período, {vencedor} em {_fmt_pct(abs(dif))} "
-        f"(dólar {_fmt_pct(j.retorno_dolar)} vs. CDI {_fmt_pct(j.retorno_cdi)})."
-    )
-
-
 def gerar_documento(
     janelas: list[JanelaResultado],
-    series_dolar_por_janela: dict[str, list],
     spread_aa: float,
     caminho_saida: Path | None = None,
     amostra: bool = False,
@@ -73,8 +60,6 @@ def gerar_documento(
         caminho_grafico = PASTA_TMP / f"grafico_{j.anos}a.png"
         grafico_janela(j, caminho_grafico)
 
-        ind = indicadores_dolar(series_dolar_por_janela[j.rotulo])
-
         dados_janelas.append({
             "rotulo": j.rotulo,
             "retorno_dolar": j.retorno_dolar,
@@ -84,15 +69,7 @@ def gerar_documento(
             "retorno_cdi_spread": j.retorno_cdi_spread,
             "retorno_cdi_spread_fmt": _fmt_pct(j.retorno_cdi_spread),
             "grafico_uri": _uri_arquivo(caminho_grafico),
-            "vol_fmt": _fmt_pct(ind.get("volatilidade_anualizada", 0.0)) if ind else "—",
-            "alta_dia_fmt": _fmt_pct(ind.get("maior_alta_dia", 0.0)) if ind else "—",
-            "queda_dia_fmt": _fmt_pct(ind.get("maior_queda_dia", 0.0)) if ind else "—",
-            "drawdown_fmt": _fmt_pct(ind.get("maior_queda_do_topo", 0.0)) if ind else "—",
-            "leitura": _leitura_rapida(j),
         })
-
-    caminho_resumo = PASTA_TMP / "grafico_resumo.png"
-    grafico_resumo_barras(janelas, caminho_resumo)
 
     data_ref = max(j.data_fim for j in janelas)
     agora = dt.datetime.now()
@@ -115,7 +92,6 @@ def gerar_documento(
         "fonte_dolar_nome": FONTE_DOLAR_NOME,
         "fonte_cdi_nome": FONTE_CDI_NOME,
         "janelas": dados_janelas,
-        "grafico_resumo_uri": _uri_arquivo(caminho_resumo),
         "gerado_em": agora.strftime("%d/%m/%Y às %H:%M"),
         "amostra": amostra,
     }
