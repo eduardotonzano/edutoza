@@ -14,6 +14,10 @@ on:
         description: "Spread anual do 'CDI + X%' de referência (ex.: 0.04 para CDI + 4%)"
         required: false
         default: "0.04"
+      spread_dolar:
+        description: "Spread anual do 'Dólar + X%' de referência (ex.: 0.035 para Dólar + 3,5%)"
+        required: false
+        default: "0.035"
       email_destino:
         description: "E-mail de destino (deixe em branco pro padrão)"
         required: false
@@ -61,14 +65,37 @@ jobs:
             echo "data=" >> "$GITHUB_OUTPUT"
           fi
 
+      # Spreads dos "+X% a.a." (vêm do formulário web ou de quem roda manualmente);
+      # validados aqui (número decimal entre 0 e 0,5, ou seja 0% a 50%) antes de ir
+      # pro passo de geração, caindo no padrão se vier vazio, malformado ou fora da
+      # faixa — mesmo cuidado do e-mail e da data, por ser texto livre vindo do
+      # formulário público.
+      - name: Validar spreads
+        id: spreads
+        env:
+          SPREAD_BRUTO: ${{ github.event.inputs.spread }}
+          SPREAD_DOLAR_BRUTO: ${{ github.event.inputs.spread_dolar }}
+        run: |
+          validar() {
+            local valor="$1" padrao="$2"
+            if echo "$valor" | grep -Eq '^[0-9]+(\.[0-9]+)?$' && awk -v v="$valor" 'BEGIN{exit !(v>=0 && v<=0.5)}'; then
+              echo "$valor"
+            else
+              echo "$padrao"
+            fi
+          }
+          echo "cdi=$(validar "$SPREAD_BRUTO" "0.04")" >> "$GITHUB_OUTPUT"
+          echo "dolar=$(validar "$SPREAD_DOLAR_BRUTO" "0.035")" >> "$GITHUB_OUTPUT"
+
       - name: Gerar o documento (dados oficiais do Banco Central)
         working-directory: dolar_x_cdi
         env:
-          SPREAD: ${{ github.event.inputs.spread || '0.04' }}
+          SPREAD: ${{ steps.spreads.outputs.cdi }}
+          SPREAD_DOLAR: ${{ steps.spreads.outputs.dolar }}
           DATA_FIM: ${{ steps.datafim.outputs.data }}
           PRETO_BRANCO: ${{ github.event.inputs.preto_branco }}
         run: |
-          ARGS=(--spread "$SPREAD")
+          ARGS=(--spread "$SPREAD" --spread-dolar "$SPREAD_DOLAR")
           if [ -n "$DATA_FIM" ]; then
             ARGS+=(--data-fim "$DATA_FIM")
           fi

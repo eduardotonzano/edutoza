@@ -48,24 +48,18 @@ def _carregar_csv_amostra(nome: str) -> list[PontoSerie]:
     return pontos
 
 
-def _fim_do_mes(d: dt.date) -> dt.date:
-    """Último dia do mês de `d`."""
-    if d.month == 12:
-        return dt.date(d.year, 12, 31)
-    return dt.date(d.year, d.month + 1, 1) - dt.timedelta(days=1)
-
-
 def _gerar(dolar: list[PontoSerie], cdi: list[PontoSerie], spread_aa: float,
            amostra: bool, caminho_saida: Path | None,
            data_fim_desejada: dt.date | None = None,
            spread_dolar_aa: float = 0.035,
            preto_branco: bool = False) -> Path:
-    # O CDI (mensal) tem seu último ponto datado no dia 1º do mês que ele
-    # representa (ex.: 01/07 = todo o mês de julho, já fechado) — não no
-    # último dia. Usar essa data crua aqui subestimaria em ~1 mês até onde
-    # os dados realmente vão, e cortaria o dólar (diário) bem antes do que
-    # precisava, mesmo já tendo dado mais recente disponível.
-    data_fim = min(dolar[-1].data, _fim_do_mes(cdi[-1].data))
+    # Referência padrão (quando ninguém escolhe uma data): hoje menos 2 dias,
+    # não o dado mais recente disponível — dá uma margem de segurança pra
+    # cotação do dólar já estar publicada, e mantém a data de corte estável
+    # ao longo do dia (não muda dependendo da hora em que o documento é
+    # gerado). O CDI é mensal e não tem ponto tão recente de qualquer forma
+    # — cada janela usa o último mês fechado que existir, veja calcular_janela.
+    data_fim = min(dolar[-1].data, dt.date.today() - dt.timedelta(days=2))
     if data_fim_desejada is not None:
         # Nunca passa do último dado real disponível — se a pessoa escolher uma
         # data futura (ou um dia sem publicação ainda), cai pro dado mais recente.
