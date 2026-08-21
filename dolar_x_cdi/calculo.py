@@ -69,15 +69,23 @@ def _serie_acumulada_cdi(pontos: list[PontoSerie], spread_aa: float = 0.0) -> li
     """Acumula o CDI dia a dia via fator composto (ver nota de metodologia
     no topo do arquivo).
 
+    O primeiro ponto é a base (0%), igual ao dólar (`_serie_acumulada_dolar`)
+    — só entra na composição a partir do segundo ponto em diante. Sem isso,
+    a taxa do próprio dia inicial da janela já entrava na conta, contando um
+    dia de CDI a mais do que o dólar conta (que só mede a razão entre o
+    preço inicial e o final, sem nunca compor o dia inicial) — descoberto
+    comparando com a Calculadora do Cidadão do BCB (que não conta o dia
+    inicial): dava ~0,07 p.p. a mais numa janela de 1 ano.
+
     `spread_aa` é um adicional anual (ex.: 0.04 para CDI + 4% a.a.),
     aplicado como fator extra composto ao dia junto ao fator do CDI.
     """
     if not pontos:
         return []
     fator_spread_dia = (1 + spread_aa) ** (1 / DIAS_UTEIS_ANO) if spread_aa else 1.0
-    serie = []
+    serie = [(pontos[0].data, 0.0)]
     acumulado = 1.0
-    for p in pontos:
+    for p in pontos[1:]:
         fator_dia = 1 + p.valor / 100
         acumulado *= fator_dia * fator_spread_dia
         serie.append((p.data, (acumulado - 1) * 100))
