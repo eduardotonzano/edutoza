@@ -23,9 +23,23 @@ FONTE = "'Poppins', 'Segoe UI', Arial, sans-serif"
 LOGO_BRANCO = PASTA_ASSETS / "logo_multiplica_branco.png"
 LOGO_NAVY = PASTA_ASSETS / "logo_multiplica_navy.png"
 
-# Cores para os gráficos (matplotlib) — mesma paleta do documento
+# Cores para os gráficos (matplotlib) — mesma paleta do documento. As linhas
+# "+ X% a.a." usam uma cor própria (não a mesma da série base) pra destoar
+# mais — só o traço (tracejado/pontilhado) já ajudava, mas de longe as duas
+# linhas de dólar (ambas navy) ficavam parecidas demais.
 CORES_GRAFICO = {
     "dolar": NAVY,
+    "dolar_spread": "#4D6A8C",  # azul médio, destoa do navy sólido do dólar
     "cdi": CIANO,
-    "cdi_spread": "#8FA3B8",  # cinza-azulado, linha de referência auxiliar
+    "cdi_spread": "#5F7488",    # cinza-azulado mais escuro que antes
+}
+
+# Paleta em tons de cinza para a versão dos gráficos otimizada pra impressão em
+# preto e branco — mesma lógica de tom+traço (série base sólida, "+ X% a.a."
+# tracejada), mas sem depender de cor pra diferenciar dólar de CDI.
+CORES_GRAFICO_PB = {
+    "dolar": "#1A1A1A",       # preto
+    "dolar_spread": "#5A5A5A",  # cinza escuro, distinto do preto do dólar
+    "cdi": "#707070",         # cinza médio
+    "cdi_spread": "#A8A8A8",  # cinza claro
 }
