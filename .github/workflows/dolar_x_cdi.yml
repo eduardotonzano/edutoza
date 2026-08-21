@@ -22,6 +22,10 @@ on:
         description: "Data final desejada para as janelas, AAAA-MM-DD (deixe em branco pro dado mais recente)"
         required: false
         default: ""
+      preto_branco:
+        description: "Gerar os gráficos em preto e branco (true/false)"
+        required: false
+        default: "false"
 
 jobs:
   gerar:
@@ -62,12 +66,16 @@ jobs:
         env:
           SPREAD: ${{ github.event.inputs.spread || '0.04' }}
           DATA_FIM: ${{ steps.datafim.outputs.data }}
+          PRETO_BRANCO: ${{ github.event.inputs.preto_branco }}
         run: |
+          ARGS=(--spread "$SPREAD")
           if [ -n "$DATA_FIM" ]; then
-            python gerar_documento.py --spread "$SPREAD" --data-fim "$DATA_FIM"
-          else
-            python gerar_documento.py --spread "$SPREAD"
+            ARGS+=(--data-fim "$DATA_FIM")
           fi
+          if [ "$PRETO_BRANCO" = "true" ]; then
+            ARGS+=(--pb)
+          fi
+          python gerar_documento.py "${ARGS[@]}"
 
       - name: Descobrir o nome do PDF gerado
         id: pdf
