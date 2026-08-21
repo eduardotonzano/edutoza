@@ -3,18 +3,16 @@
 Metodologia:
 - Dólar (USD/BRL): retorno simples entre a cotação PTAX-venda no início e
   no fim da janela (P_fim / P_ini - 1).
-- CDI: apesar do nome "CDI anualizada base 252", a série 4391 do BCB devolve
-  na prática ~1 ponto por MÊS (confirmado batendo os valores com o histórico
-  real da Selic e pela contagem de pontos por janela, que bate exatamente
-  com anos×12+1) — cada ponto é a variação do CDI naquele mês (ex.: 1,16 =
-  +1,16% no mês). A composição é direta, um fator por ponto:
-  fator_mes = 1 + cdi_%mes/100, acumulado = produtório na janela.
-- CDI + spread (ex.: CDI + 4% a.a.): mesmo fator mensal do CDI multiplicado
-  por um fator extra (1 + spread)^(1/12) — combina os dois juros ao mês.
-- Dólar + spread (ex.: Dólar + 3,5% a.a.): mesma ideia da linha de CDI + spread,
-  mas usando 252 dias úteis/ano (padrão do mercado) em vez de 12 meses/ano, já
-  que o dólar é diário — fator extra (1 + spread)^(1/252) composto a cada
-  pregão sobre a variação simples do dólar.
+- CDI: série 12 do BCB ("Taxa de juros - CDI"), genuinamente diária (~1
+  ponto por dia útil, em % ao dia — confirmado por diagnóstico, ver
+  `diagnostico_cdi_diario.py`). A composição é direta, um fator por ponto:
+  fator_dia = 1 + cdi_%dia/100, acumulado = produtório na janela — mesma
+  lógica do dólar, só que dia a dia em vez de nível de preço.
+- CDI + spread (ex.: CDI + 4% a.a.): mesmo fator diário do CDI multiplicado
+  por um fator extra (1 + spread)^(1/252) — combina os dois juros ao dia.
+- Dólar + spread (ex.: Dólar + 3,5% a.a.): mesma ideia, mas aplicada sobre a
+  variação simples do dólar em vez de um fator acumulado ponto a ponto —
+  fator extra (1 + spread)^(1/252) composto a cada pregão.
 """
 from __future__ import annotations
 
@@ -40,18 +38,8 @@ class JanelaResultado:
     serie_cdi_spread: list[tuple[dt.date, float]]
 
 
-def _fechamento_por_data(pontos: list[PontoSerie]) -> dict[dt.date, float]:
-    return {p.data: p.valor for p in pontos}
-
-
 def _corta_janela(pontos: list[PontoSerie], inicio: dt.date, fim: dt.date) -> list[PontoSerie]:
     return [p for p in pontos if inicio <= p.data <= fim]
-
-
-def _acha_data_inicio_disponivel(pontos: list[PontoSerie], alvo: dt.date) -> dt.date | None:
-    """Primeiro pregão com data >= alvo (a série só tem dias úteis)."""
-    candidatos = [p.data for p in pontos if p.data >= alvo]
-    return min(candidatos) if candidatos else None
 
 
 def _serie_acumulada_dolar(pontos: list[PontoSerie]) -> list[tuple[dt.date, float]]:
@@ -61,7 +49,6 @@ def _serie_acumulada_dolar(pontos: list[PontoSerie]) -> list[tuple[dt.date, floa
     return [(p.data, (p.valor / base - 1) * 100) for p in pontos]
 
 
-MESES_ANO = 12
 DIAS_UTEIS_ANO = 252
 
 
@@ -79,20 +66,20 @@ def _serie_acumulada_dolar_spread(pontos: list[PontoSerie], spread_aa: float = 0
 
 
 def _serie_acumulada_cdi(pontos: list[PontoSerie], spread_aa: float = 0.0) -> list[tuple[dt.date, float]]:
-    """Acumula o CDI mês a mês via fator composto (ver nota de metodologia
-    no topo do arquivo sobre por que é mensal, não diário).
+    """Acumula o CDI dia a dia via fator composto (ver nota de metodologia
+    no topo do arquivo).
 
     `spread_aa` é um adicional anual (ex.: 0.04 para CDI + 4% a.a.),
-    aplicado como fator extra composto ao mês junto ao fator do CDI.
+    aplicado como fator extra composto ao dia junto ao fator do CDI.
     """
     if not pontos:
         return []
-    fator_spread_mes = (1 + spread_aa) ** (1 / MESES_ANO) if spread_aa else 1.0
+    fator_spread_dia = (1 + spread_aa) ** (1 / DIAS_UTEIS_ANO) if spread_aa else 1.0
     serie = []
     acumulado = 1.0
     for p in pontos:
-        fator_mes = 1 + p.valor / 100
-        acumulado *= fator_mes * fator_spread_mes
+        fator_dia = 1 + p.valor / 100
+        acumulado *= fator_dia * fator_spread_dia
         serie.append((p.data, (acumulado - 1) * 100))
     return serie
 
@@ -117,21 +104,14 @@ def calcular_janela(
         data_alvo_inicio = dt.date(data_fim.year - anos, data_fim.month, data_fim.day - 1)
 
     c_janela = _corta_janela(cdi, data_alvo_inicio, data_fim)
-    # O corte acima é inclusivo nas duas pontas; com dado mensal isso pega um mês
-    # a mais do que o pedido (ex.: 13 meses pra janela de "1 ano"), porque o ponto
-    # na borda de início já é um retorno mensal cheio, não um nível de preço como
-    # o dólar. Mantém só os anos*12 meses mais recentes.
-    max_pontos_cdi = anos * MESES_ANO
-    if len(c_janela) > max_pontos_cdi:
-        c_janela = c_janela[-max_pontos_cdi:]
     if len(c_janela) < 2:
         return None
 
-    # O dólar (diário) começa exatamente em data_alvo_inicio, mas o CDI (mensal,
-    # depois do corte acima) só tem seu primeiro ponto um pouco depois — sem
-    # alinhar os dois, a linha do dólar no gráfico "nasce" antes da linha do CDI.
-    # Ancora o início do dólar na mesma data do primeiro ponto do CDI já cortado,
-    # pra as duas séries começarem juntas (e cobrirem o mesmo período de verdade).
+    # Dólar e CDI são as duas séries diárias do BCB, mas nem sempre têm
+    # exatamente o mesmo primeiro dia disponível na janela (ex.: histórico
+    # começando em datas ligeiramente diferentes). Ancora o início do dólar
+    # na mesma data do primeiro ponto do CDI já cortado, pra as duas séries
+    # começarem juntas — sem isso, uma linha podia "nascer" antes da outra.
     d_janela = _corta_janela(dolar, c_janela[0].data, data_fim)
     if len(d_janela) < 2:
         return None

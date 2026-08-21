@@ -1,18 +1,21 @@
 """Fontes oficiais de dados: Banco Central do Brasil (BCB).
 
 Duas séries do SGS (Sistema Gerenciador de Séries Temporais do BCB),
-gratuitas, sem chave de acesso:
+gratuitas, sem chave de acesso, ambas genuinamente diárias:
 
 - Dólar (USD/BRL): série 1 — "Taxa de câmbio - Livre - Dólar americano
   (venda) - diário". É a cotação oficial de fechamento (PTAX venda),
   a mesma referência usada em balanços, notas fiscais e contratos no Brasil.
   https://api.bcb.gov.br/dados/serie/bcdata.sgs.1/dados
 
-- CDI: série 4391. Nomeada "CDI anualizada base 252" no catálogo do SGS,
-  mas a API devolve, na prática, ~1 ponto por MÊS (confirmado batendo os
-  valores com o histórico real da Selic e pela contagem de pontos por
-  janela — ver `calculo.py` para a composição mensal usada).
-  https://api.bcb.gov.br/dados/serie/bcdata.sgs.4391/dados
+- CDI: série 12 ("Taxa de juros - CDI"), a taxa diária em % ao dia.
+  Confirmado por diagnóstico (ver `diagnostico_cdi_diario.py`): ~1 ponto por
+  dia útil, e o acumulado de cada mês (compondo os dias) bate com o valor
+  oficial já fechado da série 4391 (a que este projeto usava antes) com
+  diferença de milésimos de ponto percentual — só ruído de arredondamento.
+  A 4391 só publica quando o mês fecha; a 12 já tem o mês corrente
+  acumulando dia a dia, o que deixa o CDI tão atualizado quanto o dólar.
+  https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados
 
 Os dados baixados são gravados em cache local (CSV) em `cache/`, para que
 o documento possa ser regenerado sem tornar a chamar o BCB toda vez, e para
@@ -34,12 +37,12 @@ PASTA_CACHE = Path(__file__).parent / "cache"
 PASTA_CACHE.mkdir(exist_ok=True)
 
 SERIE_DOLAR = 1        # Dólar americano (venda) - diário (PTAX)
-SERIE_CDI = 4391       # CDI - na prática, ~1 ponto por mês (ver calculo.py)
+SERIE_CDI = 12         # CDI - taxa diária, % ao dia (ver diagnostico_cdi_diario.py)
 
 URL_SGS = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados"
 
 FONTE_DOLAR_NOME = "Banco Central do Brasil — PTAX (dólar venda), série SGS 1"
-FONTE_CDI_NOME = "Banco Central do Brasil — CDI, série SGS 4391"
+FONTE_CDI_NOME = "Banco Central do Brasil — CDI, série SGS 12"
 FONTE_URL = "https://www3.bcb.gov.br/sgspub/localizarseries/localizarSeries.do"
 
 
@@ -166,22 +169,6 @@ def _janelas_de_ate_10_anos(data_inicial: dt.date, data_final: dt.date) -> list[
     return janelas
 
 
-def _remover_mes_corrente_incompleto(codigo: int, pontos: list[PontoSerie]) -> list[PontoSerie]:
-    """A série 4391 (CDI) publica um ponto "ao vivo" para o mês em andamento —
-    ele vai crescendo dia a dia (é o acumulado só até a data da consulta, não o
-    mês fechado) até o mês virar de vez. Usar esse ponto como se fosse um mês
-    completo subestima muito o acumulado (ex.: consultado no dia 20, um mês que
-    normalmente fecha em ~1,1% aparece com ~0,68%). Descarta o último ponto se
-    ele cair no mês corrente — mantém só meses já fechados.
-    """
-    if codigo != SERIE_CDI or not pontos:
-        return pontos
-    hoje = dt.date.today()
-    if pontos[-1].data.year == hoje.year and pontos[-1].data.month == hoje.month:
-        return pontos[:-1]
-    return pontos
-
-
 def carregar_serie(
     codigo: int,
     data_inicial: dt.date,
@@ -212,4 +199,4 @@ def carregar_serie(
             raise
         resultado = cobertura
 
-    return _remover_mes_corrente_incompleto(codigo, resultado)
+    return resultado

@@ -55,10 +55,9 @@ def _gerar(dolar: list[PontoSerie], cdi: list[PontoSerie], spread_aa: float,
            preto_branco: bool = False) -> Path:
     # Referência padrão (quando ninguém escolhe uma data): hoje menos 2 dias,
     # não o dado mais recente disponível — dá uma margem de segurança pra
-    # cotação do dólar já estar publicada, e mantém a data de corte estável
-    # ao longo do dia (não muda dependendo da hora em que o documento é
-    # gerado). O CDI é mensal e não tem ponto tão recente de qualquer forma
-    # — cada janela usa o último mês fechado que existir, veja calcular_janela.
+    # cotação do dólar e do CDI (ambos diários) já estarem publicados, e
+    # mantém a data de corte estável ao longo do dia (não muda dependendo
+    # da hora em que o documento é gerado).
     data_fim = min(dolar[-1].data, dt.date.today() - dt.timedelta(days=2))
     if data_fim_desejada is not None:
         # Nunca passa do último dado real disponível — se a pessoa escolher uma
