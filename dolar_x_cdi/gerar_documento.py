@@ -6,6 +6,8 @@ Uso:
     python gerar_documento.py --amostra        # usa dados de amostra (sem internet),
                                                 # gera um PDF marcado como demonstração
     python gerar_documento.py --spread 0.05    # muda o spread do "CDI + X%" (padrão 4%)
+    python gerar_documento.py --spread-dolar 0.03  # muda o spread do "Dólar + X%" (padrão 3,5%)
+    python gerar_documento.py --pb             # gráficos em tons de cinza (impressão em P&B)
 
 O documento sai em `output/Dolar_x_CDI_<data>.pdf` (ou `AMOSTRA_...` no modo --amostra).
 
@@ -55,7 +57,9 @@ def _fim_do_mes(d: dt.date) -> dt.date:
 
 def _gerar(dolar: list[PontoSerie], cdi: list[PontoSerie], spread_aa: float,
            amostra: bool, caminho_saida: Path | None,
-           data_fim_desejada: dt.date | None = None) -> Path:
+           data_fim_desejada: dt.date | None = None,
+           spread_dolar_aa: float = 0.035,
+           preto_branco: bool = False) -> Path:
     # O CDI (mensal) tem seu último ponto datado no dia 1º do mês que ele
     # representa (ex.: 01/07 = todo o mês de julho, já fechado) — não no
     # último dia. Usar essa data crua aqui subestimaria em ~1 mês até onde
@@ -70,7 +74,8 @@ def _gerar(dolar: list[PontoSerie], cdi: list[PontoSerie], spread_aa: float,
     janelas = []
     for anos in JANELAS_ANOS:
         rotulo = f"{anos} ano" + ("" if anos == 1 else "s")
-        resultado = calcular_janela(rotulo, anos, dolar, cdi, data_fim, spread_aa=spread_aa)
+        resultado = calcular_janela(rotulo, anos, dolar, cdi, data_fim,
+                                     spread_aa=spread_aa, spread_dolar_aa=spread_dolar_aa)
         if resultado is None:
             print(f"[aviso] dados insuficientes para a janela de {anos} anos — pulando.")
             continue
@@ -79,7 +84,8 @@ def _gerar(dolar: list[PontoSerie], cdi: list[PontoSerie], spread_aa: float,
     if not janelas:
         raise RuntimeError("nenhuma janela pôde ser calculada — dados insuficientes.")
 
-    return gerar_documento(janelas, spread_aa, caminho_saida=caminho_saida, amostra=amostra)
+    return gerar_documento(janelas, spread_aa, spread_dolar_aa,
+                           caminho_saida=caminho_saida, amostra=amostra, preto_branco=preto_branco)
 
 
 def _validar_data_fim(bruta: str | None) -> dt.date | None:
@@ -114,7 +120,9 @@ def _diagnostico_cdi(cdi: list[PontoSerie]) -> None:
 
 
 def gerar_a_partir_do_bcb(spread_aa: float = 0.04, caminho_saida: Path | None = None,
-                          data_fim_desejada: dt.date | None = None) -> Path:
+                          data_fim_desejada: dt.date | None = None,
+                          spread_dolar_aa: float = 0.035,
+                          preto_branco: bool = False) -> Path:
     """Busca dólar e CDI oficiais no Banco Central e gera o PDF. Levanta ErroFonteDados
     se o BCB estiver inacessível (sem internet, host fora do ar etc.).
 
@@ -127,16 +135,20 @@ def gerar_a_partir_do_bcb(spread_aa: float = 0.04, caminho_saida: Path | None = 
     cdi = carregar_serie(SERIE_CDI, inicio_busca, data_final=data_fim_desejada)
     _diagnostico_cdi(cdi)
     return _gerar(dolar, cdi, spread_aa, amostra=False, caminho_saida=caminho_saida,
-                  data_fim_desejada=data_fim_desejada)
+                  data_fim_desejada=data_fim_desejada, spread_dolar_aa=spread_dolar_aa,
+                  preto_branco=preto_branco)
 
 
 def gerar_a_partir_de_amostra(spread_aa: float = 0.04, caminho_saida: Path | None = None,
-                              data_fim_desejada: dt.date | None = None) -> Path:
+                              data_fim_desejada: dt.date | None = None,
+                              spread_dolar_aa: float = 0.035,
+                              preto_branco: bool = False) -> Path:
     """Gera o PDF com os dados de demonstração locais (sem consultar o BCB)."""
     dolar = _carregar_csv_amostra("dolar_amostra.csv")
     cdi = _carregar_csv_amostra("cdi_amostra.csv")
     return _gerar(dolar, cdi, spread_aa, amostra=True, caminho_saida=caminho_saida,
-                  data_fim_desejada=data_fim_desejada)
+                  data_fim_desejada=data_fim_desejada, spread_dolar_aa=spread_dolar_aa,
+                  preto_branco=preto_branco)
 
 
 def main() -> int:
@@ -145,10 +157,14 @@ def main() -> int:
                          help="usa dados de demonstração locais em vez de consultar o BCB (para testar o layout sem internet)")
     parser.add_argument("--spread", type=float, default=0.04,
                          help="spread anual do 'CDI + X%%' de referência, ex.: 0.04 para CDI + 4%% (padrão: 0.04)")
+    parser.add_argument("--spread-dolar", type=float, default=0.035, dest="spread_dolar",
+                         help="spread anual do 'Dólar + X%%' de referência, ex.: 0.035 para Dólar + 3,5%% (padrão: 0.035)")
     parser.add_argument("--saida", type=Path, default=None, help="caminho do PDF de saída (padrão: output/Dolar_x_CDI_<data>.pdf)")
     parser.add_argument("--data-fim", type=str, default=None,
                          help="data final desejada para as janelas, formato AAAA-MM-DD "
                               "(padrão: dado mais recente disponível)")
+    parser.add_argument("--pb", action="store_true", dest="preto_branco",
+                         help="gera os gráficos em tons de cinza, otimizados pra impressão em preto e branco")
     args = parser.parse_args()
 
     try:
@@ -160,10 +176,12 @@ def main() -> int:
     try:
         if args.amostra:
             print("[amostra] usando dados locais de demonstração (não são dados oficiais do BCB).")
-            caminho = gerar_a_partir_de_amostra(args.spread, args.saida, data_fim_desejada)
+            caminho = gerar_a_partir_de_amostra(args.spread, args.saida, data_fim_desejada,
+                                                args.spread_dolar, args.preto_branco)
         else:
             print("Consultando o Banco Central do Brasil (SGS)...")
-            caminho = gerar_a_partir_do_bcb(args.spread, args.saida, data_fim_desejada)
+            caminho = gerar_a_partir_do_bcb(args.spread, args.saida, data_fim_desejada,
+                                            args.spread_dolar, args.preto_branco)
     except ErroFonteDados as exc:
         print(f"\nERRO: não foi possível obter os dados oficiais do BCB.\n  {exc}\n")
         print("Isso normalmente significa que este ambiente não tem acesso à internet")

@@ -11,6 +11,10 @@ Metodologia:
   fator_mes = 1 + cdi_%mes/100, acumulado = produtório na janela.
 - CDI + spread (ex.: CDI + 4% a.a.): mesmo fator mensal do CDI multiplicado
   por um fator extra (1 + spread)^(1/12) — combina os dois juros ao mês.
+- Dólar + spread (ex.: Dólar + 3,5% a.a.): mesma ideia da linha de CDI + spread,
+  mas usando 252 dias úteis/ano (padrão do mercado) em vez de 12 meses/ano, já
+  que o dólar é diário — fator extra (1 + spread)^(1/252) composto a cada
+  pregão sobre a variação simples do dólar.
 """
 from __future__ import annotations
 
@@ -27,9 +31,11 @@ class JanelaResultado:
     data_inicio: dt.date
     data_fim: dt.date
     retorno_dolar: float
+    retorno_dolar_spread: float
     retorno_cdi: float
     retorno_cdi_spread: float
     serie_dolar: list[tuple[dt.date, float]]   # retorno acumulado (%) dia a dia
+    serie_dolar_spread: list[tuple[dt.date, float]]
     serie_cdi: list[tuple[dt.date, float]]
     serie_cdi_spread: list[tuple[dt.date, float]]
 
@@ -56,6 +62,20 @@ def _serie_acumulada_dolar(pontos: list[PontoSerie]) -> list[tuple[dt.date, floa
 
 
 MESES_ANO = 12
+DIAS_UTEIS_ANO = 252
+
+
+def _serie_acumulada_dolar_spread(pontos: list[PontoSerie], spread_aa: float = 0.0) -> list[tuple[dt.date, float]]:
+    """Dólar + spread: a mesma variação simples do dólar, com um adicional anual
+    composto a cada pregão (ver nota de metodologia no topo do arquivo)."""
+    if not pontos:
+        return []
+    base = pontos[0].valor
+    fator_spread_dia = (1 + spread_aa) ** (1 / DIAS_UTEIS_ANO) if spread_aa else 1.0
+    return [
+        (p.data, ((p.valor / base) * (fator_spread_dia ** i) - 1) * 100)
+        for i, p in enumerate(pontos)
+    ]
 
 
 def _serie_acumulada_cdi(pontos: list[PontoSerie], spread_aa: float = 0.0) -> list[tuple[dt.date, float]]:
@@ -84,6 +104,7 @@ def calcular_janela(
     cdi: list[PontoSerie],
     data_fim: dt.date,
     spread_aa: float = 0.04,
+    spread_dolar_aa: float = 0.035,
 ) -> JanelaResultado | None:
     """Calcula a rentabilidade acumulada de uma janela (ex.: últimos 5 anos).
 
@@ -116,6 +137,7 @@ def calcular_janela(
         return None
 
     serie_dolar = _serie_acumulada_dolar(d_janela)
+    serie_dolar_spread = _serie_acumulada_dolar_spread(d_janela, spread_aa=spread_dolar_aa)
     serie_cdi = _serie_acumulada_cdi(c_janela, spread_aa=0.0)
     serie_cdi_spread = _serie_acumulada_cdi(c_janela, spread_aa=spread_aa)
 
@@ -125,9 +147,11 @@ def calcular_janela(
         data_inicio=d_janela[0].data,
         data_fim=d_janela[-1].data,
         retorno_dolar=serie_dolar[-1][1],
+        retorno_dolar_spread=serie_dolar_spread[-1][1],
         retorno_cdi=serie_cdi[-1][1],
         retorno_cdi_spread=serie_cdi_spread[-1][1],
         serie_dolar=serie_dolar,
+        serie_dolar_spread=serie_dolar_spread,
         serie_cdi=serie_cdi,
         serie_cdi_spread=serie_cdi_spread,
     )

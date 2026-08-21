@@ -10,7 +10,7 @@ from weasyprint import HTML
 
 from calculo import JanelaResultado
 from fontes import FONTE_DOLAR_NOME, FONTE_CDI_NOME
-from graficos import grafico_janela
+from graficos import grafico_janela, _fmt_spread
 import estilo
 
 PASTA_BASE = Path(__file__).parent
@@ -48,8 +48,10 @@ def _uri_arquivo(caminho: Path) -> str:
 def gerar_documento(
     janelas: list[JanelaResultado],
     spread_aa: float,
+    spread_dolar_aa: float = 0.035,
     caminho_saida: Path | None = None,
     amostra: bool = False,
+    preto_branco: bool = False,
 ) -> Path:
     """Gera os gráficos e renderiza o PDF final. Retorna o caminho do arquivo gerado."""
     PASTA_SAIDA.mkdir(exist_ok=True)
@@ -58,12 +60,15 @@ def gerar_documento(
     dados_janelas = []
     for j in janelas:
         caminho_grafico = PASTA_TMP / f"grafico_{j.anos}a.png"
-        grafico_janela(j, caminho_grafico)
+        grafico_janela(j, caminho_grafico, spread_cdi_aa=spread_aa, spread_dolar_aa=spread_dolar_aa,
+                       preto_branco=preto_branco)
 
         dados_janelas.append({
             "rotulo": j.rotulo,
             "retorno_dolar": j.retorno_dolar,
             "retorno_dolar_fmt": _fmt_pct(j.retorno_dolar),
+            "retorno_dolar_spread": j.retorno_dolar_spread,
+            "retorno_dolar_spread_fmt": _fmt_pct(j.retorno_dolar_spread),
             "retorno_cdi": j.retorno_cdi,
             "retorno_cdi_fmt": _fmt_pct(j.retorno_cdi),
             "retorno_cdi_spread": j.retorno_cdi_spread,
@@ -88,7 +93,8 @@ def gerar_documento(
         "mes_referencia": f"{MESES_PT[data_ref.month]}/{str(data_ref.year)[2:]}",
         "data_referencia_extenso": _fmt_data_extenso(data_ref),
         "data_referencia_curta": _fmt_data_curta(data_ref),
-        "spread_fmt": f"{spread_aa * 100:.0f}%",
+        "spread_fmt": _fmt_spread(spread_aa),
+        "spread_dolar_fmt": _fmt_spread(spread_dolar_aa),
         "fonte_dolar_nome": FONTE_DOLAR_NOME,
         "fonte_cdi_nome": FONTE_CDI_NOME,
         "janelas": dados_janelas,
@@ -101,7 +107,8 @@ def gerar_documento(
 
     if caminho_saida is None:
         prefixo = "AMOSTRA_Dolar_x_CDI" if amostra else "Dolar_x_CDI"
-        caminho_saida = PASTA_SAIDA / f"{prefixo}_{data_ref.isoformat()}.pdf"
+        sufixo = "_PB" if preto_branco else ""
+        caminho_saida = PASTA_SAIDA / f"{prefixo}_{data_ref.isoformat()}{sufixo}.pdf"
 
     HTML(string=html_final, base_url=str(PASTA_BASE)).write_pdf(caminho_saida)
 
