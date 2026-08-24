@@ -105,7 +105,11 @@ def main() -> int:
         print(f"\n=== Mês corrente ({mes_corrente[0]}-{mes_corrente[1]:02d}) via série diária ===")
         print(f"{len(pontos_corrente)} dias disponíveis, de {pontos_corrente[0].data} a {pontos_corrente[-1].data}")
         print(f"acumulado parcial do mês: {_compoe(pontos_corrente):.4f}%")
-        print("(a série 4391 não teria NENHUM ponto pra esse mês ainda — só aparece quando fecha)")
+        if mes_corrente in mensal_por_mes:
+            print(f"(a série 4391 já tem um ponto pra esse mês também: {mensal_por_mes[mes_corrente]:.4f}% "
+                  f"— parece publicar um valor parcial do mês corrente, não só o mês fechado)")
+        else:
+            print("(a série 4391 ainda não tem nenhum ponto pra esse mês — só aparece quando fecha, ou quando publica um parcial)")
 
     # Reproduz a janela "1 ano" tal como o documento gera: termina em D-2 (hoje
     # menos 2 dias), ancorada na última cotação do dólar disponível — igual

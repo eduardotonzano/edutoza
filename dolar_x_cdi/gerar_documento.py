@@ -3,8 +3,10 @@
 
 Uso:
     python gerar_documento.py                 # busca dados reais no BCB
-    python gerar_documento.py --amostra        # usa dados de amostra (sem internet),
-                                                # gera um PDF marcado como demonstração
+    python gerar_documento.py --amostra        # usa dados de amostra (sem internet) —
+                                                # o único indício de que é demonstração é
+                                                # o nome do arquivo (prefixo AMOSTRA_), o
+                                                # PDF em si não tem mais nenhum aviso visual
     python gerar_documento.py --spread 0.05    # muda o spread do "CDI + X%" (padrão 4%)
     python gerar_documento.py --spread-dolar 0.03  # muda o spread do "Dólar + X%" (padrão 3,5%)
     python gerar_documento.py --pb             # gráficos em tons de cinza (impressão em P&B)
