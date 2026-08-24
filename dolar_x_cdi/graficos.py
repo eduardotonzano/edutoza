@@ -102,11 +102,11 @@ def grafico_janela(
     # em cada gráfico. Com margem fixa, título e eixo alinham entre os 4.
     fig.subplots_adjust(left=0.145, right=0.83, top=_AX_TOP, bottom=_AX_BOTTOM)
 
-    # Rótulo do valor final de cada linha. O CDI (mensal) e o dólar (diário)
-    # não terminam exatamente na mesma data — o mês do CDI fecha no dia 1º,
-    # o dólar no último pregão —, então usar o x de cada série deixava os
-    # rótulos espalhados horizontalmente em vez de alinhados numa coluna;
-    # ancora todos na data final da janela (a mais recente das duas).
+    # Rótulo do valor final de cada linha. CDI e dólar são as duas séries
+    # diárias do BCB, mas podem ter um último dia disponível ligeiramente
+    # diferente (ex.: uma ainda não publicou o dia mais recente) — usar o x
+    # de cada série deixaria os rótulos espalhados horizontalmente em vez de
+    # alinhados numa coluna; ancora todos na data final da janela.
     #
     # Cada rótulo fica colado no valor real da sua linha — só é empurrado
     # pra baixo (o mínimo necessário) quando colidiria com o rótulo de cima,
